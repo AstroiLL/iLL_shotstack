@@ -1,13 +1,16 @@
 ## name: cyborgs
 ## resources_dir: Video_01
+## soundtrack: music.mp3
+## soundtrack_volume: 0.5
+## background: "#000000"
+
+| # | Resource | Trim | Duration | Trans In | Effect | Filter | Trans Out | Volume | Description |
+|---|----------|------|----------|----------|--------|--------|-----------|--------|-------------|
+| 1 | clip_01.mp4 | 00:00| 5s       | fadeFast | zoomIn | boost  | slideLeftFast | 1.0 | Intro |
+| 2 | clip_02.mp4 | 00:00| 3s       | fade     |        |        | fade      | 0.8 | Middle |
 
 ## output_format: mp4
 ## resolution: 480p
-## orientation: portrait
-
-| # | Resources | Time | Start_Effect | Start_Duration | Effect_During | End_Effect | End_Duration | Description
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | clip_01.mp4 | 00:00 - 00:05 | fade in | 2 sec |  | fade out | 2 sec | 
-| 2 | clip_02.mp4 | 00:00 - 00:08 | fade in | 2 sec |  | fade out | 2 sec | 
-
-## result_file: video_test_06.mp4
+## aspect_ratio: 9:16
+## fps: 30
+## thumbnail_capture: 1

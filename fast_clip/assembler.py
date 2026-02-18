@@ -1,6 +1,7 @@
 """Video assembler for Fast-Clip - main orchestration module."""
 
 import json
+import re
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
@@ -32,6 +33,31 @@ class VideoAssembler:
         self.api_key = api_key
         self.uploader = ShotstackUploader(api_key, ingest_url)
         self.client = ShotstackClient(api_key, edit_url)
+
+    def _extract_resources(self, script_data: dict) -> list[str]:
+        """Extract resource paths from script clips.
+
+        Args:
+            script_data: Script data with timeline
+
+        Returns:
+            List of resource paths
+        """
+        resources = []
+        timeline = script_data.get("timeline", {})
+        tracks = timeline.get("tracks", [])
+
+        for track in tracks:
+            clips = track.get("clips", [])
+            for clip in clips:
+                asset = clip.get("asset", {})
+                src = asset.get("src", "")
+                # Extract {{resources_dir/filename}} pattern
+                match = re.match(r"^\{\{([^}]+)\}\}$", src)
+                if match:
+                    resources.append(match.group(1))
+
+        return resources
 
     def assemble(
         self,
@@ -67,7 +93,8 @@ class VideoAssembler:
 
         # Step 2: Get resources directory
         script_dir = script_path.parent
-        resources_dir = script_dir / script_data.get("resources_dir", ".")
+        resources_dir_name = script_data.get("resourcesDir", ".")
+        resources_dir = script_dir / resources_dir_name
 
         if not resources_dir.exists():
             return AssemblyResult(
@@ -78,27 +105,28 @@ class VideoAssembler:
         if verbose:
             print("📤 Uploading video files...")
 
-        timeline = script_data.get("timeline", [])
+        resource_paths = self._extract_resources(script_data)
         uploaded_files = {}
 
-        for i, item in enumerate(timeline):
-            resource = item.get("resource")
-            if not resource:
-                continue
-
-            file_path = resources_dir / resource
+        for i, resource_path in enumerate(resource_paths):
+            # resource_path is like "Video_01/clip_01.mp4"
+            file_path = script_dir / resource_path
 
             if verbose:
-                print(f"   [{i + 1}/{len(timeline)}] Uploading {resource}...")
+                resource_name = Path(resource_path).name
+                print(
+                    f"   [{i + 1}/{len(resource_paths)}] Uploading {resource_name}..."
+                )
 
             result = self.uploader.upload(file_path)
 
             if not result.success:
                 return AssemblyResult(
-                    success=False, error=f"Failed to upload {resource}: {result.error}"
+                    success=False,
+                    error=f"Failed to upload {resource_path}: {result.error}",
                 )
 
-            uploaded_files[resource] = result.url
+            uploaded_files[resource_path] = result.url
 
             if verbose:
                 print(f"      ✓ Uploaded (ID: {result.file_id})")
@@ -128,6 +156,9 @@ class VideoAssembler:
 
         render_id = render_result.render_id
 
+        if render_id is None:
+            return AssemblyResult(success=False, error="Render ID is None")
+
         if verbose:
             print(f"   ✓ Render ID: {render_id}")
             print("⏳ Waiting for render to complete...")
@@ -155,7 +186,17 @@ class VideoAssembler:
         if output_dir is None:
             output_dir = Path.cwd()
 
-        output_path = output_dir / script_data.get("result_file", "output.mp4")
+        # Use output filename from script or default
+        output_config = script_data.get("output", {})
+        output_name = output_config.get("filename", "output.mp4")
+        output_path = output_dir / output_name
+
+        if final_result.url is None:
+            return AssemblyResult(
+                success=False,
+                render_id=render_id,
+                error="Download URL is None",
+            )
 
         success = self.client.download(final_result.url, output_path)
 

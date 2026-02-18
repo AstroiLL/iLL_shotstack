@@ -1,18 +1,54 @@
 #!/usr/bin/env python3
-"""Fast-Clip Script Checker: Validate JSON scripts before processing."""
+"""Fast-Clip Script Checker: Validate Shotstack-compatible JSON scripts."""
 
 import json
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from dataclasses import dataclass
 
 
-# Constants from main.py
-SUPPORTED_FORMATS = {"mp4", "avi", "mov", "mkv"}
-RESOLUTIONS = {"2160p", "1440p", "1080p", "720p", "480p"}
-ORIENTATIONS = {"landscape", "portrait", "square"}
-VALID_EFFECTS = {"fade_in", "fade_out"}
+# Valid Shotstack values
+VALID_TRANSITIONS = {
+    "fade",
+    "fadefast",
+    "fadeslow",
+    "slideleft",
+    "slideright",
+    "slideup",
+    "slidedown",
+    "slideleftfast",
+    "sliderightfast",
+    "slideupfast",
+    "slidedownfast",
+    "wipeleft",
+    "wiperight",
+    "wipeleftfast",
+    "wiperightfast",
+    "carouselleft",
+    "carouselright",
+    "carouselupfast",
+    "shuffletopright",
+    "shuffleleftbottom",
+    "reveal",
+    "revealfast",
+    "revealslow",
+    "zoom",
+    "zoomfast",
+    "zoomslow",
+}
+VALID_EFFECTS = {"zoomin", "zoomout", "kenburns"}
+VALID_FILTERS = {
+    "boost",
+    "greyscale",
+    "contrast",
+    "muted",
+    "negative",
+    "darken",
+    "lighten",
+}
+VALID_ASPECT_RATIOS = {"9:16", "16:9", "1:1", "4:5", "4:3"}
+VALID_FORMATS = {"mp4", "mov", "webm", "gif"}
 
 
 @dataclass
@@ -52,544 +88,327 @@ class ScriptChecker:
         elif status == "WARNING":
             self.has_warnings = True
 
-        if self.verbose:
-            icon = "✓" if status == "OK" else ("⚠" if status == "WARNING" else "✗")
-            print(f"  {icon} {field}: {message}")
-            if suggestion:
-                print(f"    → {suggestion}")
+    def load_script(self) -> bool:
+        """Load and parse JSON script."""
+        self.log(f"Loading: {self.script_path}")
 
-    def check_file_exists(self) -> bool:
-        """Check if script file exists."""
         if not self.script_path.exists():
             self.add_result(
-                "File",
+                "file",
                 "ERROR",
-                f"Script file not found: {self.script_path}",
-                "Check the file path and try again",
+                f"File not found: {self.script_path}",
+                "Check file path and try again",
             )
             return False
 
-        self.add_result("File", "OK", f"Found: {self.script_path}")
-        return True
-
-    def check_json_valid(self) -> bool:
-        """Check if file is valid JSON."""
         try:
             with open(self.script_path, "r", encoding="utf-8") as f:
                 self.data = json.load(f)
-            self.add_result("JSON", "OK", "Valid JSON format")
+            self.add_result("file", "OK", "JSON loaded successfully")
             return True
         except json.JSONDecodeError as e:
-            self.add_result(
-                "JSON", "ERROR", f"Invalid JSON: {e}", "Fix JSON syntax errors"
-            )
+            self.add_result("file", "ERROR", f"Invalid JSON: {e}")
             return False
         except Exception as e:
-            self.add_result(
-                "JSON",
-                "ERROR",
-                f"Cannot read file: {e}",
-                "Check file permissions and encoding",
-            )
+            self.add_result("file", "ERROR", f"Failed to read file: {e}")
             return False
 
     def check_required_fields(self):
-        """Check presence of required fields."""
-        required = ["name", "resources_dir", "timeline", "result_file"]
+        """Check that required fields are present."""
+        if self.data is None:
+            return
 
+        required = ["name", "timeline", "output"]
         for field in required:
             if field not in self.data:
                 self.add_result(
-                    f"Field '{field}'",
+                    field,
                     "ERROR",
-                    f"Required field '{field}' is missing",
+                    f"Missing required field: '{field}'",
                     f"Add '{field}' to your script",
                 )
-            else:
-                self.add_result(f"Field '{field}'", "OK", "Present")
 
-    def check_field_types(self):
-        """Check types of fields."""
-        # Check name
-        if "name" in self.data:
-            if not isinstance(self.data["name"], str):
-                self.add_result(
-                    "Field 'name'",
-                    "ERROR",
-                    f"Expected string, got {type(self.data['name']).__name__}",
-                    "Change to a string value",
-                )
-            elif not self.data["name"].strip():
-                self.add_result(
-                    "Field 'name'",
-                    "ERROR",
-                    "Cannot be empty string",
-                    "Provide a non-empty project name",
-                )
-            else:
-                self.add_result("Field 'name'", "OK", f"Value: '{self.data['name']}'")
-
-        # Check resources_dir
-        if "resources_dir" in self.data:
-            if not isinstance(self.data["resources_dir"], str):
-                self.add_result(
-                    "Field 'resources_dir'",
-                    "ERROR",
-                    f"Expected string, got {type(self.data['resources_dir']).__name__}",
-                    "Change to a string value",
-                )
-            else:
-                self.add_result(
-                    "Field 'resources_dir'",
-                    "OK",
-                    f"Value: '{self.data['resources_dir']}'",
-                )
-
-        # Check result_file
-        if "result_file" in self.data:
-            if not isinstance(self.data["result_file"], str):
-                self.add_result(
-                    "Field 'result_file'",
-                    "ERROR",
-                    f"Expected string, got {type(self.data['result_file']).__name__}",
-                    "Change to a string value",
-                )
-            elif not self.data["result_file"].endswith(
-                (".mp4", ".avi", ".mov", ".mkv")
-            ):
-                self.add_result(
-                    "Field 'result_file'",
-                    "WARNING",
-                    f"No valid video extension: {self.data['result_file']}",
-                    "Add .mp4, .avi, .mov, or .mkv extension",
-                )
-            else:
-                self.add_result(
-                    "Field 'result_file'", "OK", f"Value: '{self.data['result_file']}'"
-                )
-
-        # Check timeline
-        if "timeline" in self.data:
-            if not isinstance(self.data["timeline"], list):
-                self.add_result(
-                    "Field 'timeline'",
-                    "ERROR",
-                    f"Expected array, got {type(self.data['timeline']).__name__}",
-                    "Change to an array of timeline items",
-                )
-            elif len(self.data["timeline"]) == 0:
-                self.add_result(
-                    "Field 'timeline'",
-                    "ERROR",
-                    "Timeline cannot be empty",
-                    "Add at least one timeline item",
-                )
-            elif len(self.data["timeline"]) > 10:
-                self.add_result(
-                    "Field 'timeline'",
-                    "ERROR",
-                    f"Too many clips: {len(self.data['timeline'])} (max 10)",
-                    "Remove some clips or split into multiple projects",
-                )
-            else:
-                self.add_result(
-                    "Field 'timeline'", "OK", f"{len(self.data['timeline'])} item(s)"
-                )
-
-    def check_optional_fields(self):
-        """Check optional fields if present."""
-        # Check output_format
-        if "output_format" in self.data:
-            fmt = self.data["output_format"]
-            if fmt is None:
-                self.add_result(
-                    "Field 'output_format'", "OK", "Not specified (will use source)"
-                )
-            elif not isinstance(fmt, str):
-                self.add_result(
-                    "Field 'output_format'",
-                    "ERROR",
-                    f"Expected string, got {type(fmt).__name__}",
-                    "Change to a string value or remove",
-                )
-            elif fmt.lower() not in SUPPORTED_FORMATS:
-                self.add_result(
-                    "Field 'output_format'",
-                    "WARNING",
-                    f"Unsupported format: '{fmt}'",
-                    f"Use one of: {', '.join(sorted(SUPPORTED_FORMATS))}",
-                )
-            else:
-                self.add_result("Field 'output_format'", "OK", f"Value: '{fmt}'")
-
-        # Check resolution
-        if "resolution" in self.data:
-            res = self.data["resolution"]
-            if res is None:
-                self.add_result(
-                    "Field 'resolution'", "OK", "Not specified (will use source)"
-                )
-            elif not isinstance(res, str):
-                self.add_result(
-                    "Field 'resolution'",
-                    "ERROR",
-                    f"Expected string, got {type(res).__name__}",
-                    "Change to a string value or remove",
-                )
-            elif res.lower() not in RESOLUTIONS:
-                self.add_result(
-                    "Field 'resolution'",
-                    "WARNING",
-                    f"Unsupported resolution: '{res}'",
-                    f"Use one of: {', '.join(sorted(RESOLUTIONS))}",
-                )
-            else:
-                self.add_result("Field 'resolution'", "OK", f"Value: '{res}'")
-
-        # Check orientation
-        if "orientation" in self.data:
-            orient = self.data["orientation"]
-            if orient is None:
-                self.add_result(
-                    "Field 'orientation'",
-                    "OK",
-                    "Not specified (will detect from first clip)",
-                )
-            elif not isinstance(orient, str):
-                self.add_result(
-                    "Field 'orientation'",
-                    "ERROR",
-                    f"Expected string, got {type(orient).__name__}",
-                    "Change to a string value or remove",
-                )
-            elif orient.lower() not in ORIENTATIONS:
-                self.add_result(
-                    "Field 'orientation'",
-                    "WARNING",
-                    f"Unsupported orientation: '{orient}'",
-                    f"Use one of: {', '.join(sorted(ORIENTATIONS))}",
-                )
-            else:
-                self.add_result("Field 'orientation'", "OK", f"Value: '{orient}'")
-
-    def check_resources_directory(self):
-        """Check if resources directory exists."""
-        if "resources_dir" not in self.data:
+    def check_timeline(self):
+        """Check timeline structure."""
+        if self.data is None:
             return
 
-        resources_dir = self.script_dir / self.data["resources_dir"]
-        if not resources_dir.exists():
-            self.add_result(
-                "Resources Directory",
-                "ERROR",
-                f"Directory not found: {resources_dir}",
-                f"Create directory '{self.data['resources_dir']}' or update 'resources_dir' field",
-            )
-        elif not resources_dir.is_dir():
-            self.add_result(
-                "Resources Directory",
-                "ERROR",
-                f"Not a directory: {resources_dir}",
-                "Update 'resources_dir' to point to a valid directory",
-            )
-        else:
-            self.add_result("Resources Directory", "OK", f"Found: {resources_dir}")
-
-    def check_timeline_items(self):
-        """Check each timeline item."""
-        if "timeline" not in self.data or not isinstance(self.data["timeline"], list):
+        timeline = self.data.get("timeline")
+        if not timeline:
             return
 
-        resources_dir = None
-        if "resources_dir" in self.data:
-            resources_dir = self.script_dir / self.data["resources_dir"]
-
-        for i, item in enumerate(self.data["timeline"]):
-            prefix = f"Timeline[{i}]"
-
-            # Check if item is a dict
-            if not isinstance(item, dict):
-                self.add_result(
-                    prefix,
-                    "ERROR",
-                    f"Expected object, got {type(item).__name__}",
-                    "Change to an object with timeline item fields",
-                )
-                continue
-
-            # Check required fields in item
-            item_required = ["id", "resource", "time_start", "time_end"]
-            for field in item_required:
-                if field not in item:
-                    self.add_result(
-                        f"{prefix}.{field}",
-                        "ERROR",
-                        f"Required field '{field}' is missing",
-                        f"Add '{field}' to timeline item",
-                    )
-
-            # Check id
-            if "id" in item:
-                if not isinstance(item["id"], int):
-                    self.add_result(
-                        f"{prefix}.id",
-                        "ERROR",
-                        f"Expected integer, got {type(item['id']).__name__}",
-                        "Change to an integer",
-                    )
-                elif item["id"] != i + 1:
-                    self.add_result(
-                        f"{prefix}.id",
-                        "WARNING",
-                        f"ID is {item['id']}, expected {i + 1} (sequential)",
-                        f"Change id to {i + 1} for consistency",
-                    )
-                else:
-                    self.add_result(f"{prefix}.id", "OK", f"Value: {item['id']}")
-
-            # Check resource file
-            if "resource" in item:
-                resource = item["resource"]
-                if not isinstance(resource, str):
-                    self.add_result(
-                        f"{prefix}.resource",
-                        "ERROR",
-                        f"Expected string, got {type(resource).__name__}",
-                        "Change to a string filename",
-                    )
-                elif resources_dir and resources_dir.exists():
-                    resource_path = resources_dir / resource
-                    if not resource_path.exists():
-                        self.add_result(
-                            f"{prefix}.resource",
-                            "ERROR",
-                            f"File not found: {resource}",
-                            f"Add file to '{self.data['resources_dir']}' or update filename",
-                        )
-                    else:
-                        self.add_result(
-                            f"{prefix}.resource", "OK", f"Found: {resource}"
-                        )
-                else:
-                    self.add_result(
-                        f"{prefix}.resource",
-                        "OK",
-                        f"Value: '{resource}' (cannot verify - directory not found)",
-                    )
-
-            # Check time fields
-            self._check_time_field(prefix, item, "time_start")
-            self._check_time_field(prefix, item, "time_end")
-
-            # Check time consistency
-            if "time_start" in item and "time_end" in item:
-                try:
-                    start = self._parse_time(item["time_start"])
-                    end = self._parse_time(item["time_end"])
-                    if start >= end:
-                        self.add_result(
-                            f"{prefix}.time",
-                            "ERROR",
-                            f"time_start ({item['time_start']}) >= time_end ({item['time_end']})",
-                            "Ensure time_start is less than time_end",
-                        )
-                    else:
-                        duration = end - start
-                        self.add_result(
-                            f"{prefix}.time", "OK", f"Duration: {duration}s"
-                        )
-                except:
-                    pass  # Already reported parsing errors
-
-            # Check effects
-            self._check_effect(prefix, item, "start_effect", "start_duration")
-            self._check_effect(prefix, item, "end_effect", "end_duration")
-
-    def _parse_time(self, time_str: str) -> float:
-        """Parse time string to seconds."""
-        parts = time_str.split(":")
-        if len(parts) == 2:
-            minutes, seconds = map(int, parts)
-            return minutes * 60 + seconds
-        elif len(parts) == 3:
-            hours, minutes, seconds = map(int, parts)
-            return hours * 3600 + minutes * 60 + seconds
-        else:
-            raise ValueError(f"Invalid time format: {time_str}")
-
-    def _check_time_field(self, prefix: str, item: dict, field: str):
-        """Check a time field."""
-        if field not in item:
+        if not isinstance(timeline, dict):
+            self.add_result("timeline", "ERROR", "Timeline must be an object")
             return
 
-        value = item[field]
-        if not isinstance(value, str):
+        tracks = timeline.get("tracks")
+        if not tracks or not isinstance(tracks, list):
             self.add_result(
-                f"{prefix}.{field}",
-                "ERROR",
-                f"Expected string, got {type(value).__name__}",
-                "Use format MM:SS or HH:MM:SS",
+                "timeline.tracks", "ERROR", "Timeline must have tracks array"
             )
             return
 
-        try:
-            self._parse_time(value)
-            self.add_result(f"{prefix}.{field}", "OK", f"Value: '{value}'")
-        except ValueError:
+        if len(tracks) == 0:
+            self.add_result("timeline.tracks", "ERROR", "At least one track required")
+            return
+
+        clips = tracks[0].get("clips", [])
+        if not clips:
             self.add_result(
-                f"{prefix}.{field}",
-                "ERROR",
-                f"Invalid time format: '{value}'",
-                "Use format MM:SS or HH:MM:SS (e.g., '00:05' or '01:30:00')",
+                "timeline.clips", "ERROR", "Track must have at least one clip"
+            )
+            return
+
+        if len(clips) > 10:
+            self.add_result(
+                "timeline.clips",
+                "WARNING",
+                f"Many clips ({len(clips)}). Consider fewer for better performance",
             )
 
-    def _check_effect(
-        self, prefix: str, item: dict, effect_field: str, duration_field: str
-    ):
-        """Check effect and its duration."""
-        effect = item.get(effect_field)
-        duration = item.get(duration_field)
+        for i, clip in enumerate(clips):
+            self.check_clip(clip, i)
 
-        if effect is None and duration is None:
-            return  # No effect specified
+    def check_clip(self, clip: dict, index: int):
+        """Check a single clip."""
+        prefix = f"clip[{index}]"
 
-        if effect is not None and effect not in VALID_EFFECTS:
+        # Check asset
+        asset = clip.get("asset")
+        if not asset:
+            self.add_result(f"{prefix}.asset", "ERROR", "Missing asset")
+            return
+
+        src = asset.get("src")
+        if not src:
+            self.add_result(f"{prefix}.asset.src", "ERROR", "Missing asset source")
+
+        clip_type = asset.get("type")
+        if clip_type not in ("video", "image"):
             self.add_result(
-                f"{prefix}.{effect_field}",
+                f"{prefix}.asset.type",
+                "ERROR",
+                f"Invalid type: '{clip_type}'",
+                "Use 'video' or 'image'",
+            )
+
+        # Check transitions
+        transition = clip.get("transition")
+        if transition:
+            trans_in = transition.get("in", "").lower()
+            trans_out = transition.get("out", "").lower()
+
+            if trans_in and trans_in not in VALID_TRANSITIONS:
+                self.add_result(
+                    f"{prefix}.transition.in",
+                    "WARNING",
+                    f"Unknown transition: '{trans_in}'",
+                    f"Valid: {', '.join(sorted(VALID_TRANSITIONS))[:50]}...",
+                )
+
+            if trans_out and trans_out not in VALID_TRANSITIONS:
+                self.add_result(
+                    f"{prefix}.transition.out",
+                    "WARNING",
+                    f"Unknown transition: '{trans_out}'",
+                    f"Valid: {', '.join(sorted(VALID_TRANSITIONS))[:50]}...",
+                )
+
+        # Check effect
+        effect = clip.get("effect", "").lower()
+        if effect and effect not in VALID_EFFECTS:
+            self.add_result(
+                f"{prefix}.effect",
                 "WARNING",
                 f"Unknown effect: '{effect}'",
-                f"Use one of: {', '.join(sorted(VALID_EFFECTS))}",
+                f"Valid: {', '.join(VALID_EFFECTS)}",
             )
-        elif effect is not None:
-            self.add_result(f"{prefix}.{effect_field}", "OK", f"Value: '{effect}'")
 
-        if duration is not None:
-            if not isinstance(duration, str):
-                self.add_result(
-                    f"{prefix}.{duration_field}",
-                    "ERROR",
-                    f"Expected string, got {type(duration).__name__}",
-                    "Use format like '3s'",
-                )
-            elif not duration.endswith("s"):
-                self.add_result(
-                    f"{prefix}.{duration_field}",
-                    "WARNING",
-                    f"Duration should end with 's': '{duration}'",
-                    "Change to format like '3s'",
-                )
-            else:
-                try:
-                    float(duration[:-1])
-                    self.add_result(
-                        f"{prefix}.{duration_field}", "OK", f"Value: '{duration}'"
-                    )
-                except ValueError:
-                    self.add_result(
-                        f"{prefix}.{duration_field}",
-                        "ERROR",
-                        f"Invalid duration: '{duration}'",
-                        "Use format like '3s' (number followed by 's')",
-                    )
-
-        # Check if effect has duration
-        if effect is not None and duration is None:
+        # Check filter
+        filter_name = clip.get("filter", "").lower()
+        if filter_name and filter_name not in VALID_FILTERS:
             self.add_result(
-                f"{prefix}.{effect_field}",
+                f"{prefix}.filter",
                 "WARNING",
-                f"Effect '{effect}' specified without {duration_field}",
-                f"Add {duration_field} (e.g., '3s') or remove {effect_field}",
+                f"Unknown filter: '{filter_name}'",
+                f"Valid: {', '.join(VALID_FILTERS)}",
             )
 
-    def check_all(self) -> bool:
-        """Run all checks. Return True if no errors."""
-        if self.verbose:
-            print(f"\nChecking script: {self.script_path}\n")
-            print("=" * 60)
+        # Check length
+        length = clip.get("length")
+        if length is None:
+            self.add_result(f"{prefix}.length", "ERROR", "Missing clip length")
+        elif length <= 0:
+            self.add_result(f"{prefix}.length", "ERROR", f"Invalid length: {length}")
 
-        # Basic checks
-        if not self.check_file_exists():
-            return False
+    def check_output(self):
+        """Check output configuration."""
+        if self.data is None:
+            return
 
-        if not self.check_json_valid():
-            return False
+        output = self.data.get("output")
+        if not output:
+            return
 
-        if self.verbose:
-            print("\n" + "-" * 60)
-            print("Checking structure...")
-            print("-" * 60)
+        # Check format
+        fmt = output.get("format", "").lower()
+        if fmt and fmt not in VALID_FORMATS:
+            self.add_result(
+                "output.format",
+                "WARNING",
+                f"Unknown format: '{fmt}'",
+                f"Valid: {', '.join(VALID_FORMATS)}",
+            )
 
-        # Structure checks
-        self.check_required_fields()
-        self.check_field_types()
-        self.check_optional_fields()
+        # Check aspect ratio
+        aspect = output.get("aspectRatio", "")
+        if aspect and aspect not in VALID_ASPECT_RATIOS:
+            self.add_result(
+                "output.aspectRatio",
+                "WARNING",
+                f"Unknown aspect ratio: '{aspect}'",
+                f"Valid: {', '.join(VALID_ASPECT_RATIOS)}",
+            )
 
-        if self.verbose:
-            print("\n" + "-" * 60)
-            print("Checking resources...")
-            print("-" * 60)
+        # Check fps
+        fps = output.get("fps")
+        if fps and (fps < 1 or fps > 60):
+            self.add_result(
+                "output.fps",
+                "WARNING",
+                f"Unusual FPS: {fps}",
+                "Typical values: 24, 25, 30, 60",
+            )
 
-        # Resource checks
-        self.check_resources_directory()
-        self.check_timeline_items()
+    def check_resources(self):
+        """Check that referenced resources exist."""
+        if self.data is None:
+            return
 
-        # Summary
-        if self.verbose:
-            print("\n" + "=" * 60)
-            print("SUMMARY")
-            print("=" * 60)
+        resources_dir = self.data.get("resourcesDir", ".")
+        resources_path = self.script_dir / resources_dir
 
-            errors = sum(1 for r in self.results if r.status == "ERROR")
-            warnings = sum(1 for r in self.results if r.status == "WARNING")
-            ok = sum(1 for r in self.results if r.status == "OK")
+        if not resources_path.exists():
+            self.add_result(
+                "resourcesDir",
+                "ERROR",
+                f"Resources directory not found: {resources_dir}",
+                "Check directory path",
+            )
+            return
 
-            print(f"  ✓ Passed: {ok}")
-            print(f"  ⚠ Warnings: {warnings}")
-            print(f"  ✗ Errors: {errors}")
+        timeline = self.data.get("timeline", {})
+        tracks = timeline.get("tracks", [])
+        if not tracks:
+            return
 
-            if errors > 0:
-                print(f"\n  Result: FAILED - Fix {errors} error(s) before processing")
-                return False
-            elif warnings > 0:
-                print(f"\n  Result: PASSED with {warnings} warning(s)")
-                return True
+        clips = tracks[0].get("clips", [])
+        for i, clip in enumerate(clips):
+            asset = clip.get("asset", {})
+            src = asset.get("src", "")
+
+            # Extract resource name from template
+            if src.startswith("{{") and src.endswith("}}"):
+                resource = src[2:-2].split("/")[-1]
             else:
-                print("\n  Result: PASSED - Ready to process!")
-                return True
+                resource = src.split("/")[-1]
 
-        return not self.has_errors
+            if resource:
+                resource_path = resources_path / resource
+                if not resource_path.exists():
+                    self.add_result(
+                        f"clip[{i}].resource",
+                        "WARNING",
+                        f"Resource not found: {resource}",
+                        f"Place {resource} in {resources_dir}/",
+                    )
+
+    def run_checks(self) -> Tuple[bool, List[CheckResult]]:
+        """Run all checks and return results."""
+        if not self.load_script():
+            return False, self.results
+
+        self.check_required_fields()
+        self.check_timeline()
+        self.check_output()
+        self.check_resources()
+
+        return not self.has_errors, self.results
+
+    def print_report(self):
+        """Print formatted check report."""
+        print(f"\n{'=' * 60}")
+        print(f"Script: {self.script_path}")
+        print(f"{'=' * 60}")
+
+        # Group by status
+        errors = [r for r in self.results if r.status == "ERROR"]
+        warnings = [r for r in self.results if r.status == "WARNING"]
+        ok = [r for r in self.results if r.status == "OK"]
+
+        if errors:
+            print(f"\n❌ ERRORS ({len(errors)}):")
+            for r in errors:
+                print(f"  ✗ {r.field}: {r.message}")
+                if r.suggestion:
+                    print(f"    → {r.suggestion}")
+
+        if warnings:
+            print(f"\n⚠️  WARNINGS ({len(warnings)}):")
+            for r in warnings:
+                print(f"  ! {r.field}: {r.message}")
+                if r.suggestion:
+                    print(f"    → {r.suggestion}")
+
+        if self.verbose and ok:
+            print(f"\n✓ OK ({len(ok)}):")
+            for r in ok[:10]:  # Limit OK messages
+                print(f"  ✓ {r.field}: {r.message}")
+            if len(ok) > 10:
+                print(f"  ... and {len(ok) - 10} more")
+
+        print(f"\n{'=' * 60}")
+        if self.has_errors:
+            print("RESULT: ❌ FAILED (fix errors before proceeding)")
+        elif self.has_warnings:
+            print("RESULT: ⚠️  PASSED WITH WARNINGS")
+        else:
+            print("RESULT: ✓ ALL CHECKS PASSED")
+        print(f"{'=' * 60}\n")
+
+
+def check_script(
+    script_path: Path, verbose: bool = False
+) -> Tuple[bool, List[CheckResult]]:
+    """Check a script file."""
+    checker = ScriptChecker(script_path, verbose)
+    is_valid, results = checker.run_checks()
+    checker.print_report()
+    return is_valid, results
 
 
 def main():
     """Main entry point."""
-    verbose = False
-    script_path = None
+    args = sys.argv[1:]
 
-    # Parse arguments
-    for arg in sys.argv[1:]:
-        if arg == "-v" or arg == "--verbose":
-            verbose = True
-        elif arg.startswith("-"):
-            print(f"Unknown option: {arg}")
-            print("Usage: python check.py [-v] <script.json>")
-            sys.exit(2)
-        else:
-            script_path = arg
-
-    if not script_path:
-        print("Usage: python check.py [-v] <script.json>")
+    if not args or args[0] in ("-h", "--help"):
+        print("Fast-Clip Script Checker")
+        print("")
+        print("Usage: python check.py <script.json> [options]")
         print("")
         print("Options:")
-        print("  -v, --verbose    Show detailed check results")
+        print("  -v, --verbose    Show detailed output")
+        print("  -h, --help       Show this help")
         print("")
         print("Examples:")
-        print("  python check.py script.json          # Silent mode")
-        print("  python check.py -v script.json       # Verbose mode")
-        sys.exit(2)
+        print("  python check.py script.json")
+        print("  python check.py script.json -v")
+        sys.exit(0)
 
-    checker = ScriptChecker(script_path, verbose)
-    is_valid = checker.check_all()
+    script_path = Path(args[0])
+    verbose = "-v" in args or "--verbose" in args
 
+    is_valid, _ = check_script(script_path, verbose)
     sys.exit(0 if is_valid else 1)
 
 

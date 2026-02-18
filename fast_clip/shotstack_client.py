@@ -66,7 +66,7 @@ class ShotstackClient:
         except (KeyError, ValueError) as e:
             return RenderResult(success=False, error=f"Invalid response format: {e}")
 
-    def get_status(self, render_id: str) -> RenderResult:
+    def get_status(self, render_id: Optional[str]) -> RenderResult:
         """Check render status.
 
         Args:
@@ -75,6 +75,9 @@ class ShotstackClient:
         Returns:
             RenderResult with current status
         """
+        if render_id is None:
+            return RenderResult(success=False, error="Render ID is None")
+
         url = f"{self.base_url}/render/{render_id}"
 
         try:
@@ -107,7 +110,7 @@ class ShotstackClient:
             )
 
     def wait_for_render(
-        self, render_id: str, timeout: int = 300, callback=None
+        self, render_id: Optional[str], timeout: int = 300, callback=None
     ) -> RenderResult:
         """Wait for render to complete.
 
@@ -119,6 +122,9 @@ class ShotstackClient:
         Returns:
             RenderResult with final status
         """
+        if render_id is None:
+            return RenderResult(success=False, error="Render ID is None")
+
         start_time = time.time()
 
         while time.time() - start_time < timeout:
@@ -141,7 +147,7 @@ class ShotstackClient:
             error=f"Render timeout after {timeout} seconds",
         )
 
-    def download(self, url: str, output_path: Path) -> bool:
+    def download(self, url: Optional[str], output_path: Path) -> bool:
         """Download rendered video.
 
         Args:
@@ -151,8 +157,13 @@ class ShotstackClient:
         Returns:
             True if successful
         """
+        if url is None:
+            return False
+
+        url_str: str = url
+
         try:
-            response = requests.get(url, stream=True)
+            response = requests.get(url_str, stream=True)
             response.raise_for_status()
 
             output_path = Path(output_path)
