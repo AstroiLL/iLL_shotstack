@@ -2,7 +2,7 @@
 
 ## Обзор
 
-Fast-Clip - Python-приложение для автоматической сборки видео из клипов с использованием Shotstack API. Приложение состоит из модульной архитектуры с четким разделением ответственности.
+Fast-Clip - Python-приложение для автоматической сборки видео из клипов с использованием Shotstack API. Приложение поддерживает Shotstack-native JSON формат и Markdown с табличным представлением timeline.
 
 ## Архитектура
 
@@ -18,14 +18,14 @@ shortstack/
 │   │   ├── checker.py           # ScriptChecker класс
 │   │   └── validator.py         # Функции валидации
 │   ├── uploader.py              # Загрузка файлов (Shotstack Ingest API)
-│   ├── timeline_builder.py      # Конвертация скриптов в Shotstack формат
+│   ├── timeline_builder.py      # Обработка placeholders в Shotstack JSON
 │   ├── shotstack_client.py      # API клиент для рендеринга
 │   └── assembler.py             # Главный оркестратор
 │
 ├── assemble.py                  # CLI для сборки видео
 ├── build.sh                     # Bash скрипт для быстрого запуска
-├── check.py                     # Legacy standalone checker
-├── convert_script.py            # Конвертер MD/JSON
+├── check.py                     # Валидатор Shotstack-native JSON
+├── convert_script.py            # Конвертер MD → Shotstack JSON
 │
 ├── .env                         # Конфигурация окружения
 ├── .env.example                 # Шаблон конфигурации
@@ -36,15 +36,34 @@ shortstack/
 ### Поток данных
 
 ```
-JSON Script → Validation → Upload → Timeline Builder → Shotstack API → Download
-     ↓            ↓           ↓            ↓               ↓              ↓
-  check.py   validator   uploader   timeline_      shotstack      assembler
-                                    builder.py     _client.py
+Markdown Script → convert_script.py → Shotstack-native JSON → assemble.py
+                                           ↓                      ↓
+                                    TimelineBuilder        Validation
+                                           ↓                      ↓
+                                     Replace {{}}          Upload
+                                           ↓                      ↓
+                                    Shotstack JSON        Render
+                                           ↓                      ↓
+                                     Shotstack API      Download
 ```
 
 ## Компоненты
 
-### 1. Uploader (`fast_clip/uploader.py`)
+### 1. Конвертер (`convert_script.py`)
+
+**Назначение:** Преобразование Markdown скриптов в Shotstack-native JSON.
+
+**Процесс конвертации:**
+1. Парсинг заголовков (name, resources_dir, soundtrack и др.)
+2. Парсинг таблицы timeline
+3. Генерация структуры Shotstack JSON с `{{resources_dir/file}}` placeholders
+
+**Поддерживаемые эффекты:**
+- Transitions: fade, fadeFast, slideLeft, slideRight, wipe, zoom и др.
+- Effects: zoomIn, zoomOut, kenBurns
+- Filters: boost, greyscale, contrast, muted, negative, darken, lighten
+
+### 2. Uploader (`fast_clip/uploader.py`)
 
 **Назначение:** Загрузка локальных видео-файлов в Shotstack через Ingest API.
 
@@ -55,22 +74,25 @@ JSON Script → Validation → Upload → Timeline Builder → Shotstack API →
 
 **Важно:** Shotstack требует время для обработки загруженных файлов. Метод `_wait_for_file_ready()` делает polling API каждые 2 секунды до получения статуса "ready".
 
-### 2. Timeline Builder (`fast_clip/timeline_builder.py`)
+### 3. Timeline Builder (`fast_clip/timeline_builder.py`)
 
-**Назначение:** Конвертация формата скриптов Fast-Clip в формат Shotstack Edit API.
+**Назначение:** Замена `{{placeholder}}` на реальные URL загруженных файлов.
 
-**Ключевые преобразования:**
-- `time_start` → `asset.trim` (обрезка начала)
-- `time_end - time_start` → `length` (длительность клипа)
-- Эффекты (`fade_in`/`fade_out`) → `transition.in`/`transition.out`
-- Разрешение + ориентация → `output.size`
+**Ключевые функции:**
+- Рекурсивный поиск placeholders в JSON
+- Замена `{{resources_dir/filename}}` на URL
+- Удаление служебных полей (`name`, `resourcesDir`) перед отправкой
 
-**Поддерживаемые эффекты:**
-- `fade_in` → `transition: {in: "fade"}`
-- `fade_out` → `transition: {out: "fade"}`
-- `slide_in`/`slide_out` - заготовлены, требуют доработки
+**Пример:**
+```json
+// Вход:
+{"asset": {"src": "{{Video_01/clip.mp4}}"}}
 
-### 3. Shotstack Client (`fast_clip/shotstack_client.py`)
+// Выход:
+{"asset": {"src": "https://shotstack.io/.../clip.mp4"}}
+```
+
+### 4. Shotstack Client (`fast_clip/shotstack_client.py`)
 
 **Назначение:** HTTP клиент для Shotstack Edit API.
 
@@ -87,28 +109,96 @@ JSON Script → Validation → Upload → Timeline Builder → Shotstack API →
 - `done` - готово
 - `failed` - ошибка
 
-### 4. Assembler (`fast_clip/assembler.py`)
+### 5. Assembler (`fast_clip/assembler.py`)
 
 **Назначение:** Главный оркестратор, объединяющий все компоненты.
 
 **Процесс сборки:**
-1. Загрузка и валидация JSON скрипта
-2. Загрузка всех видео-файлов через Uploader
-3. Сборка timeline через TimelineBuilder
-4. Отправка на рендеринг через ShotstackClient
-5. Ожидание завершения (polling)
-6. Скачивание результата
+1. Загрузка Shotstack-native JSON скрипта
+2. Извлечение ресурсов из timeline.tracks[].clips[].asset.src
+3. Загрузка всех видео-файлов через Uploader
+4. Замена placeholders на URL через TimelineBuilder
+5. Отправка на рендеринг через ShotstackClient
+6. Ожидание завершения (polling)
+7. Скачивание результата
 
-### 5. Check Module (`fast_clip/check/`)
+### 6. Check Module (`fast_clip/check/`)
 
-**Назначение:** Валидация скриптов перед обработкой.
+**Назначение:** Валидация Shotstack-native JSON скриптов перед обработкой.
 
 **Проверки:**
 - Существование файлов
 - Валидность JSON
-- Корректность временных меток
-- Поддерживаемые форматы и эффекты
-- Наличие обязательных полей
+- Поддерживаемые transitions, effects, filters
+- Корректность aspect_ratio, format, fps
+- Валидность длительности клипов
+
+**Поддерживаемые значения:**
+- Transitions: fade, fadeFast, slideLeft, slideRight и др.
+- Effects: zoomIn, zoomOut, kenBurns
+- Filters: boost, greyscale, contrast, muted, negative, darken, lighten
+- Aspect Ratios: 9:16, 16:9, 1:1, 4:5, 4:3
+- Formats: mp4, mov, webm, gif
+
+## Форматы данных
+
+### Markdown Script Format
+
+```markdown
+## name: project_name
+## resources_dir: Video_01
+## soundtrack: music.mp3
+## soundtrack_volume: 0.5
+## background: "#000000"
+
+| # | Resource | Trim | Duration | Trans In | Effect | Filter | Trans Out | Volume | Description |
+|---|----------|------|----------|----------|--------|--------|-----------|--------|-------------|
+| 1 | clip.mp4 | 00:00| 5s       | fadeFast | zoomIn | boost  | slideLeft | 1.0    | Intro       |
+
+## output_format: mp4
+## resolution: 1080p
+## aspect_ratio: 9:16
+## fps: 30
+```
+
+### Shotstack-native JSON Format
+
+```json
+{
+  "name": "project_name",
+  "resourcesDir": "Video_01",
+  "timeline": {
+    "soundtrack": {
+      "src": "{{Video_01/music.mp3}}",
+      "effect": "fadeIn",
+      "volume": 0.5
+    },
+    "background": "#000000",
+    "tracks": [{
+      "clips": [{
+        "asset": {
+          "type": "video",
+          "src": "{{Video_01/clip.mp4}}",
+          "trim": 0,
+          "volume": 1.0
+        },
+        "start": "auto",
+        "length": 5.0,
+        "transition": {"in": "fadeFast", "out": "slideLeft"},
+        "effect": "zoomIn",
+        "filter": "boost"
+      }]
+    }]
+  },
+  "output": {
+    "format": "mp4",
+    "resolution": "1080p",
+    "aspectRatio": "9:16",
+    "fps": 30,
+    "thumbnail": {"capture": 1}
+  }
+}
+```
 
 ## Shotstack API Integration
 
@@ -132,26 +222,28 @@ POST /edit/stage/render          → отправка на рендеринг
 GET  /edit/stage/render/{id}     → проверка статуса
 ```
 
-**Формат запроса:**
+**Формат запроса (Shotstack-native):**
 ```json
 {
   "timeline": {
+    "soundtrack": {...},
+    "background": "#000000",
     "tracks": [{
       "clips": [{
-        "asset": {
-          "type": "video",
-          "src": "https://...",
-          "trim": 0
-        },
+        "asset": {"type": "video", "src": "url", "trim": 0, "volume": 1.0},
         "start": "auto",
-        "length": 5,
-        "transition": {"in": "fade"}
+        "length": 5.0,
+        "transition": {"in": "fadeFast", "out": "slideLeft"},
+        "effect": "zoomIn",
+        "filter": "boost"
       }]
     }]
   },
   "output": {
     "format": "mp4",
-    "size": {"width": 1920, "height": 1080}
+    "resolution": "1080p",
+    "aspectRatio": "9:16",
+    "fps": 30
   }
 }
 ```
@@ -162,7 +254,6 @@ GET  /edit/stage/render/{id}     → проверка статуса
 
 ```bash
 SHOTSTACK_API_KEY=xxx        # Обязательно
-SHOTSTACK_ENV=stage          # stage или v1 (production)
 ```
 
 ### Зависимости (pyproject.toml)
@@ -174,6 +265,8 @@ dependencies = [
     "pydantic",        # Валидация данных
     "requests",        # HTTP клиент
     "python-dotenv",   # Загрузка .env
+    "ruff",            # Линтер
+    "mypy",            # Type checker
 ]
 ```
 
@@ -182,7 +275,7 @@ dependencies = [
 ### Установка dev-зависимостей
 
 ```bash
-uv add --dev ruff mypy
+uv sync
 ```
 
 ### Код-стайл
@@ -205,37 +298,37 @@ uv run ruff check --fix .
 # Форматирование
 uv run ruff format .
 
-# Тестирование (ручное)
-uv run python assemble.py script_video_01.json -v
+# Конвертация MD в JSON
+uv run python convert_script.py script.md
+
+# Валидация
+uv run python check.py script.json -v
+
+# Сборка видео
+uv run python assemble.py script.json -v
 ```
 
 ## Расширение функциональности
 
-### Добавление нового эффекта
+### Добавление нового transition
 
-1. Добавить в `EFFECT_MAP` в `timeline_builder.py`:
+1. Добавить в `VALID_TRANSITIONS` в `convert_script.py` и `check.py`:
 ```python
-"zoom_in": {"effect": "zoomIn"}
+VALID_TRANSITIONS = {"fade", "fadeFast", "newEffect"}
 ```
 
-2. Добавить валидацию в `fast_clip/check/validator.py`:
-```python
-VALID_EFFECTS = {"fade_in", "fade_out", "zoom_in"}
-```
-
-3. Обновить документацию в README.md
+2. Обновить документацию в README.md
 
 ### Поддержка нового типа ассета
 
-1. Расширить `_build_clip()` в `timeline_builder.py`
-2. Добавить тип в `parse_timeline_item()` в `validator.py`
-3. Обновить схему в `convert_script.py` (Pydantic модели)
+1. Обновить `build_clip()` в `convert_script.py` для определения типа
+2. Проверить поддержку в `fast_clip/uploader.py`
+3. Обновить валидацию в `check.py`
 
 ## Известные ограничения
 
 - Максимум 10 клипов в timeline (ограничение валидатора)
-- Только fade эффекты реализованы полностью
-- Нет поддержки аудио дорожек
+- Нет поддержки сложной аудио микшировки (только фоновая музыка)
 - Требуется интернет-соединение для работы с API
 - На бесплатном тарифе Shotstack есть ограничения
 
@@ -245,6 +338,7 @@ VALID_EFFECTS = {"fade_in", "fade_out", "zoom_in"}
 
 ```bash
 uv run python assemble.py script.json -v
+uv run python check.py script.json -v
 ```
 
 ### Логирование HTTP запросов
@@ -279,6 +373,12 @@ curl -H "x-api-key: $SHOTSTACK_API_KEY" \
 
 Причина: Неправильный формат timeline или отсутствующие ассеты.
 Решение: Проверить скрипт через `check.py -v`.
+
+### Неизвестный эффект/переход
+
+Причина: Используется эффект, не поддерживаемый Shotstack.
+Решение: Проверить список VALID_TRANSITIONS/VALID_EFFECTS/VALID_FILTERS
+и использовать только допустимые значения.
 
 ## Контакты и ресурсы
 
