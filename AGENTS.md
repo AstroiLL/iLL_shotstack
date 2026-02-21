@@ -3,6 +3,8 @@
 
 Guidelines for AI coding agents working in this repository.
 
+Use MCP Context7 for documentations
+
 ## Build, Lint, and Test Commands
 
 ```bash
