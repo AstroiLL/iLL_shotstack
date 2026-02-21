@@ -84,6 +84,17 @@ def main():
         print(f"❌ Error: Script not found: {script_path}")
         sys.exit(1)
 
+    # Check file format
+    if script_path.suffix == ".md":
+        print("❌ Error: Markdown files are not supported directly.")
+        print("   Please convert to JSON first:")
+        print(f"   uv run python convert_script.py {script_path}")
+        sys.exit(1)
+    elif script_path.suffix != ".json":
+        print(f"❌ Error: Unsupported file format '{script_path.suffix}'")
+        print("   Supported formats: .json")
+        sys.exit(1)
+
     # Create assembler and run
     print("🎬 Fast-Clip Video Assembler")
     print(f"   Script: {script_path}")

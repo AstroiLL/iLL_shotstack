@@ -33,35 +33,44 @@ shotstack/
 └── uv.lock                      # Lock файл uv
 ```
 
-### Поток данных
+### Поток данных (Template + Merge Workflow)
 
 ```
-Markdown Script → convert_script.py → Shotstack-native JSON → assemble.py
-                                           ↓                      ↓
-                                    TimelineBuilder        Validation
-                                           ↓                      ↓
-                                     Replace {{}}          Upload
-                                           ↓                      ↓
-                                    Shotstack JSON        Render
-                                           ↓                      ↓
-                                     Shotstack API      Download
+Markdown Script → convert_script.py → Shotstack Template JSON → assemble.py
+                                           ↓                           ↓
+                                    Template + Merge array       Validation
+                                           ↓                           ↓
+                                     {{placeholders}}            Upload files
+                                           ↓                           ↓
+                                     Merge fields               Replace {{}}
+                                           ↓                           ↓
+                                     Render request             Download
+                                           ↓                           ↓
+                                     Shotstack API              Result
 ```
 
 ## Компоненты
 
 ### 1. Конвертер (`convert_script.py`)
 
-**Назначение:** Преобразование Markdown скриптов в Shotstack-native JSON.
+**Назначение:** Преобразование Markdown скриптов в Shotstack Template JSON и обратно.
 
-**Процесс конвертации:**
+**Процесс конвертации MD → JSON:**
 1. Парсинг заголовков (name, resources_dir, soundtrack и др.)
-2. Парсинг таблицы timeline
-3. Генерация структуры Shotstack JSON с `{{resources_dir/file}}` placeholders
+2. Парсинг таблицы с колонками: Text, Description, Clip, Timing, Duration, Effect, Music effect, Sound effect
+3. Генерация структуры Shotstack Template JSON с `{{resources_dir/file}}` placeholders
+4. Создание merge массива для замены placeholders на URL
 
-**Поддерживаемые эффекты:**
-- Transitions: fade, fadeFast, slideLeft, slideRight, wipe, zoom и др.
-- Effects: zoomIn, zoomOut, kenBurns
-- Filters: boost, greyscale, contrast, muted, negative, darken, lighten
+**Процесс конвертации JSON → MD:**
+1. Извлечение данных из template.timeline и template.output
+2. Восстановление таблицы с текстовыми оверлеями
+3. Сопоставление аудио треков с видео по timing
+
+**Особенности:**
+- **Автоопределение направления**: по расширению файла (.md → .json, .json → .md)
+- **Индексация**: при существовании выходного файла добавляется индекс (script_1.json, script_2.json)
+- **Поддерживаемые эффекты**: fade, fadeFast, slideLeft, slideRight, wipe, zoom, zoomIn, zoomOut, kenBurns
+- **Фильтры**: boost, greyscale, contrast, muted, negative, darken, lighten
 
 ### 2. Uploader (`fast_clip/uploader.py`)
 
@@ -76,20 +85,41 @@ Markdown Script → convert_script.py → Shotstack-native JSON → assemble.py
 
 ### 3. Timeline Builder (`fast_clip/timeline_builder.py`)
 
-**Назначение:** Замена `{{placeholder}}` на реальные URL загруженных файлов.
+**Назначение:** Замена `{{placeholder}}` на реальные URL загруженных файлов через merge workflow.
 
 **Ключевые функции:**
-- Рекурсивный поиск placeholders в JSON
-- Замена `{{resources_dir/filename}}` на URL
+- Рекурсивный поиск placeholders в template JSON
+- Замена `{{resources_dir/filename}}` на URL из merge массива
+- Поддержка template структуры (timeline внутри template объекта)
 - Удаление служебных полей (`name`, `resourcesDir`) перед отправкой
+
+**Workflow:**
+1. Получение template JSON с `{{placeholders}}`
+2. Загрузка файлов через Ingest API
+3. Создание merge массива: `[{"find": "Video_01/clip.mp4", "replace": "https://..."}]`
+4. Отправка на рендеринг с template + merge
 
 **Пример:**
 ```json
-// Вход:
-{"asset": {"src": "{{Video_01/clip.mp4}}"}}
+// Template вход:
+{
+  "template": {
+    "timeline": {
+      "tracks": [{
+        "clips": [{
+          "asset": {"src": "{{Video_01/clip.mp4}}"}
+        }]
+      }]
+    }
+  },
+  "merge": [{"find": "Video_01/clip.mp4", "replace": ""}]
+}
 
-// Выход:
-{"asset": {"src": "https://shotstack.io/.../clip.mp4"}}
+// После обработки merge:
+{
+  "id": "template-id",
+  "merge": [{"find": "Video_01/clip.mp4", "replace": "https://shotstack.io/..."}]
+}
 ```
 
 ### 4. Shotstack Client (`fast_clip/shotstack_client.py`)
@@ -111,55 +141,76 @@ Markdown Script → convert_script.py → Shotstack-native JSON → assemble.py
 
 ### 5. Assembler (`fast_clip/assembler.py`)
 
-**Назначение:** Главный оркестратор, объединяющий все компоненты.
+**Назначение:** Главный оркестратор, объединяющий все компоненты с поддержкой template + merge workflow.
 
 **Процесс сборки:**
-1. Загрузка Shotstack-native JSON скрипта
-2. Извлечение ресурсов из timeline.tracks[].clips[].asset.src
-3. Загрузка всех видео-файлов через Uploader
-4. Замена placeholders на URL через TimelineBuilder
-5. Отправка на рендеринг через ShotstackClient
-6. Ожидание завершения (polling)
-7. Скачивание результата
+1. Загрузка Shotstack Template JSON скрипта
+2. Проверка формата (template с merge vs direct URL)
+3. Извлечение ресурсов из template.timeline.tracks[].clips[].asset.src
+4. Сбор уникальных файлов из merge массива
+5. Загрузка всех файлов (видео + аудио) через Uploader
+6. Создание merge данных с реальными URL
+7. Отправка на рендеринг через ShotstackClient с template + merge
+8. Ожидание завершения (polling)
+9. Скачивание результата
+
+**Поддержка форматов:**
+- **Template + Merge**: JSON с `{"template": {...}, "merge": [...]}`
+- **Direct URL**: JSON с прямыми URL в src (устаревший формат)
 
 ### 6. Check Module (`fast_clip/check/`)
 
-**Назначение:** Валидация Shotstack-native JSON скриптов перед обработкой.
+**Назначение:** Валидация Shotstack Template JSON скриптов перед обработкой.
 
 **Проверки:**
-- Существование файлов
 - Валидность JSON
+- Наличие template и merge полей
+- Существование файлов в resourcesDir
 - Поддерживаемые transitions, effects, filters
 - Корректность aspect_ratio, format, fps
 - Валидность длительности клипов
+- Корректность аудио клипов (type, src, volume)
 
 **Поддерживаемые значения:**
-- Transitions: fade, fadeFast, slideLeft, slideRight и др.
+- Transitions: fade, fadeFast, slideLeft, slideRight, zoom и др.
 - Effects: zoomIn, zoomOut, kenBurns
 - Filters: boost, greyscale, contrast, muted, negative, darken, lighten
 - Aspect Ratios: 9:16, 16:9, 1:1, 4:5, 4:3
 - Formats: mp4, mov, webm, gif
+- Asset Types: video, image, audio
 
 ## Форматы данных
 
-### Markdown Script Format
+### Markdown Script Format (v2)
 
 ```markdown
 ## name: project_name
-## resources_dir: Video_01
+## resources_dir: Content
 ## soundtrack: music.mp3
 ## soundtrack_volume: 0.5
 ## background: "#000000"
 
-| # | Resource | Trim | Duration | Trans In | Effect | Filter | Trans Out | Volume | Description |
-|---|----------|------|----------|----------|--------|--------|-----------|--------|-------------|
-| 1 | clip.mp4 | 00:00| 5s       | fadeFast | zoomIn | boost  | slideLeft | 1.0    | Intro       |
+| # | Text | Description | Clip | Timing | Duration | Effect | Music effect | Sound effect |
+|---|------|-------------|------|--------|----------|--------|--------------|--------------|
+| 1 | Привет! | Аватар | avatar.mp4 | 00:00:000-00:03:000 | 3.0s | ZoomIn | | |
+| 2 | Как дела? | Аватар | avatar.mp4 | 00:03:000-00:05:500 | 2.5s | | | click.wav |
+| 3 | Смотри | Видео | content.mp4 | 00:05:500-00:08:000 | 2.5s | | | whoosh.wav |
 
 ## output_format: mp4
 ## resolution: 1080p
 ## aspect_ratio: 9:16
 ## fps: 30
 ```
+
+**Описание колонок:**
+- `Text` - Текст для оверлея на видео
+- `Description` - Описание сцены (не в видео)
+- `Clip` - Имя файла видео
+- `Timing` - Временной интервал (MM:SS:mmm-MM:SS:mmm)
+- `Duration` - Длительность клипа
+- `Effect` - Визуальный эффект (ZoomIn, FadeIn, FadeOut)
+- `Music effect` - Эффект для фоновой музыки
+- `Sound effect` - Звуковой эффект
 
 ### Shotstack-native JSON Format
 

@@ -4,16 +4,20 @@
 
 ## Что делает программа
 
-Fast-Clip позволяет автоматически собирать видео из нескольких клипов с помощью облачного сервиса [Shotstack](https://shotstack.io/). Вы создаете скрипт в Markdown или JSON, который описывает:
+Fast-Clip позволяет автоматически собирать видео из нескольких клипов с помощью облачного сервиса [Shotstack](https://shotstack.io/). Вы создаете скрипт в Markdown, который описывает:
 
-- Какие клипы использовать и с какого момента
+- Текстовые оверлеи для каждого клипа
+- Видео-клипы и звуковые эффекты
 - Длительность каждого клипа
 - Переходы между клипами (fade, slide, zoom и др.)
 - Эффекты во время клипа (zoomIn, kenBurns)
-- Фильтры цветокоррекции (boost, greyscale)
 - Фоновую музыку и общие настройки
 
-Программа загружает клипы в облако, собирает их в нужном порядке и скачивает готовое видео.
+Программа автоматически:
+1. Конвертирует MD скрипт в Shotstack template формат
+2. Загружает клипы в облако Shotstack
+3. Собирает видео с текстовыми оверлеями и звуковыми эффектами
+4. Скачивает готовое видео
 
 ## Требования
 
@@ -59,20 +63,28 @@ cp .env.example .env
 ### Быстрый старт
 
 ```bash
+# Конвертировать MD в JSON (автоопределение формата)
+uv run python convert_script.py script.md
+
 # Собрать видео из скрипта
-./build.sh script_video_04.json
+./build.sh script.json
 
 # С подробным выводом
-./build.sh -v script_video_04.json
+./build.sh -v script.json
 
 # Указать папку для сохранения
-./build.sh -o ./output script_video_04.json
+./build.sh -o ./output script.json
 ```
 
 ### Или через Python
 
 ```bash
-uv run python assemble.py script_video_04.json -v
+# Конвертация (автоопределение направления)
+uv run python convert_script.py script.md        # MD -> JSON
+uv run python convert_script.py script.json      # JSON -> MD
+
+# Сборка видео
+uv run python assemble.py script.json -v
 ```
 
 ## Формат скрипта
@@ -83,15 +95,16 @@ uv run python assemble.py script_video_04.json -v
 
 ```markdown
 ## name: my_video
-## resources_dir: Video_01
+## resources_dir: Content
 ## soundtrack: music.mp3
 ## soundtrack_volume: 0.5
 ## background: "#000000"
 
-| # | Resource | Trim | Duration | Trans In | Effect | Filter | Trans Out | Volume | Description |
-|---|----------|------|----------|----------|--------|--------|-----------|--------|-------------|
-| 1 | clip_01.mp4 | 00:00| 5s       | fadeFast | zoomIn | boost  | slideLeftFast | 1.0 | Intro |
-| 2 | clip_02.mp4 | 00:10| 3s       | fade     |        |        | fade      | 0.8 | Middle |
+| # | Text | Description | Clip | Timing | Duration | Effect | Music effect | Sound effect |
+|---|------|-------------|------|--------|----------|--------|--------------|--------------|
+| 1 | Привет! | Аватар | avatar.mp4 | 00:00:000-00:03:000 | 3.0s | ZoomIn | | |
+| 2 | Как дела? | Аватар | avatar.mp4 | 00:03:000-00:05:500 | 2.5s | | | click.wav |
+| 3 | Смотри это | Видео | content.mp4 | 00:05:500-00:08:000 | 2.5s | | | whoosh.wav |
 
 ## output_format: mp4
 ## resolution: 1080p
@@ -105,15 +118,14 @@ uv run python assemble.py script_video_04.json -v
 | Поле | Описание | Пример |
 |------|----------|--------|
 | `#` | Порядковый номер | 1, 2, 3... |
-| `Resource` | Имя файла видео или изображения | clip.mp4, photo.jpg |
-| `Trim` | Время начала в исходном файле | 00:00, 00:30, 01:15 |
-| `Duration` | Длительность клипа | 5s, 10s, 3.5s |
-| `Trans In` | Переход на входе | fadeFast, slideLeftFast |
-| `Effect` | Эффект во время клипа | zoomIn, kenBurns |
-| `Filter` | Цветовой фильтр | boost, greyscale, contrast |
-| `Trans Out` | Переход на выходе | fade, zoomFast |
-| `Volume` | Громкость клипа (0.0-1.0) | 1.0, 0.5, 0.0 |
-| `Description` | Описание (не используется в видео) | Произвольный текст |
+| `Text` | Текст для оверлея на видео | "Привет!", "Смотри" |
+| `Description` | Описание сцены (не в видео) | Аватар, Видео |
+| `Clip` | Имя файла видео | avatar.mp4, content.mp4 |
+| `Timing` | Временной интервал | 00:00:000-00:03:000 |
+| `Duration` | Длительность клипа | 3.0s, 2.5s |
+| `Effect` | Визуальный эффект | ZoomIn, FadeIn, FadeOut |
+| `Music effect` | Эффект для фоновой музыки | FadeIn, FadeOut |
+| `Sound effect` | Звуковой эффект | click.wav, whoosh.wav |
 
 ### Заголовки скрипта
 
@@ -128,51 +140,76 @@ uv run python assemble.py script_video_04.json -v
 - `fps` - кадров в секунду
 - `thumbnail_capture` - секунда для thumbnail
 
-### Конвертация MD в JSON
+### Конвертация форматов
 
 ```bash
+# MD -> JSON (автоопределение)
 uv run python convert_script.py script.md
-# Создаст script.json с Shotstack-native форматом
+# Создаст script.json с Shotstack template форматом
+
+# JSON -> MD (автоопределение)
+uv run python convert_script.py script.json
+# Создаст script.md из JSON
+
+# При существовании файла добавляется индекс:
+# script.json -> script_1.json -> script_2.json
 ```
 
-### Shotstack-native JSON формат
+### Shotstack Template JSON формат
 
-После конвертации получается родной формат Shotstack:
+После конвертации получается template формат Shotstack с merge полями:
 
 ```json
 {
   "name": "my_video",
-  "resourcesDir": "Video_01",
-  "timeline": {
-    "soundtrack": {
-      "src": "{{Video_01/music.mp3}}",
-      "effect": "fadeIn",
-      "volume": 0.5
-    },
-    "background": "#000000",
-    "tracks": [{
-      "clips": [{
-        "asset": {
-          "type": "video",
-          "src": "{{Video_01/clip_01.mp4}}",
-          "trim": 0,
-          "volume": 1.0
-        },
-        "start": "auto",
-        "length": 5.0,
-        "transition": {"in": "fadeFast", "out": "slideLeftFast"},
-        "effect": "zoomIn",
-        "filter": "boost"
+  "resourcesDir": "Content",
+  "template": {
+    "timeline": {
+      "soundtrack": {
+        "src": "{{Content/music.mp3}}",
+        "effect": "fadeIn",
+        "volume": 0.5
+      },
+      "background": "#000000",
+      "tracks": [{
+        "clips": [{
+          "asset": {
+            "type": "video",
+            "src": "{{Content/avatar.mp4}}",
+            "trim": 0,
+            "overlay": {
+              "type": "title",
+              "text": "Привет!",
+              "style": "minimal"
+            }
+          },
+          "start": 0.0,
+          "length": 3.0,
+          "transition": {"in": "zoom"},
+          "effect": "zoomIn"
+        }]
+      }, {
+        "clips": [{
+          "asset": {
+            "type": "audio",
+            "src": "{{Content/click.wav}}"
+          },
+          "start": 3.0,
+          "length": 2.5
+        }]
       }]
-    }]
+    },
+    "output": {
+      "format": "mp4",
+      "resolution": "1080p",
+      "aspectRatio": "9:16",
+      "fps": 30
+    }
   },
-  "output": {
-    "format": "mp4",
-    "resolution": "1080p",
-    "aspectRatio": "9:16",
-    "fps": 30,
-    "thumbnail": {"capture": 1}
-  }
+  "merge": [
+    {"find": "Content/avatar.mp4", "replace": ""},
+    {"find": "Content/click.wav", "replace": ""}
+  ]
 }
 ```
 
@@ -210,15 +247,29 @@ uv run python convert_script.py script.md
 Перед сборкой проверьте скрипт на ошибки:
 
 ```bash
-uv run python check.py script_video_04.json -v
+uv run python check.py script.json -v
 ```
 
 ## Примеры
 
 В репозитории есть примеры скриптов:
-- `script_video_04.md` - пример с эффектами и фильтрами
-- `script_video_04.json` - результат конвертации в Shotstack формат
-- `Video_01/` - папка с тестовыми видео
+- `script_content.md` - пример с текстовыми оверлеями и звуковыми эффектами
+- `test_script.md` - простой тестовый пример
+- `Content/` - папка с тестовыми видео
+
+## Особенности
+
+### Гибридный подход Template + Merge
+
+Fast-Clip использует оптимальный подход:
+1. **Template** - структура видео с плейсхолдерами {{file}}
+2. **Merge** - замена плейсхолдеров на реальные URL после загрузки
+3. **Авто-индексация** - при существовании файла создается новый с индексом
+
+### Двусторонняя конвертация
+
+- **MD → JSON**: Создает Shotstack template с текстовыми оверлеями
+- **JSON → MD**: Восстанавливает MD таблицу из template
 
 ## Ограничения
 
@@ -233,6 +284,7 @@ uv run python check.py script_video_04.json -v
 # Справка по использованию
 ./build.sh --help
 uv run python assemble.py --help
+uv run python convert_script.py --help
 
 # Проверить версии
 uv --version
