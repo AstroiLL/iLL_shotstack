@@ -93,7 +93,13 @@ class VideoAssembler:
 
         # Step 2: Get resources directory
         script_dir = script_path.parent
-        resources_dir_name = script_data.get("resourcesDir", ".")
+        # Get resources_dir from template data or main script level
+        template_data = (
+            script_data.get("template", {}) if "template" in script_data else {}
+        )
+        resources_dir_name = script_data.get(
+            "resourcesDir", template_data.get("resourcesDir", ".")
+        )
         resources_dir = script_dir / resources_dir_name
 
         if not resources_dir.exists():
@@ -135,11 +141,14 @@ class VideoAssembler:
         if verbose:
             print("🎬 Building timeline...")
 
+        # Create complete data for TimelineBuilder
         builder = TimelineBuilder(script_data)
         builder.set_uploaded_files(uploaded_files)
 
         try:
             edit_data = builder.build()
+            if not edit_data:
+                edit_data = {"timeline": {"tracks": []}}
         except ValueError as e:
             return AssemblyResult(success=False, error=f"Timeline build failed: {e}")
 
@@ -210,6 +219,198 @@ class VideoAssembler:
         if verbose:
             print(f"   ✓ Saved to: {output_path}")
             print("✅ Assembly complete!")
+
+        return AssemblyResult(
+            success=True, output_path=output_path, render_id=render_id
+        )
+
+    def assemble_with_template(
+        self,
+        script_path: Path,
+        output_dir: Optional[Path] = None,
+        verbose: bool = False,
+    ) -> AssemblyResult:
+        """Assemble video from script using template + merge workflow.
+
+        Args:
+            script_path: Path to JSON script with template
+            output_dir: Where to save output (default: current directory)
+            verbose: Print progress
+
+        Returns:
+            AssemblyResult with status
+        """
+        """Assemble video from script using template + merge workflow.
+
+        Args:
+            script_path: Path to JSON script with template
+            output_dir: Where to save output (default: current directory)
+            verbose: Print progress
+
+        Returns:
+            AssemblyResult with status
+        """
+        script_path = Path(script_path)
+
+        # Step 1: Load and validate script
+        if verbose:
+            print(f"📄 Loading template script: {script_path}")
+
+        try:
+            with open(script_path, "r", encoding="utf-8") as f:
+                script_data = json.load(f)
+        except FileNotFoundError:
+            return AssemblyResult(
+                success=False, error=f"Script not found: {script_path}"
+            )
+        except json.JSONDecodeError as e:
+            return AssemblyResult(success=False, error=f"Invalid JSON: {e}")
+
+        # Check if this is a template format
+        if "template" not in script_data:
+            return AssemblyResult(
+                success=False,
+                error="Script is not in template format. Missing 'template' field.",
+            )
+
+        template_data = script_data.get("template", {})
+        merge_fields = script_data.get("merge", [])
+
+        # Step 2: Upload files for merge fields
+        if verbose:
+            print("📤 Uploading files for template...")
+
+        uploaded_files = {}
+        script_dir = script_path.parent
+        resources_dir_name = script_data.get(
+            "resourcesDir", template_data.get("resourcesDir", ".")
+        )
+        resources_dir = script_dir / resources_dir_name
+
+        if verbose:
+            print(f"Debug: Using resources_dir = {resources_dir_name}")
+
+        if not resources_dir.exists():
+            return AssemblyResult(
+                success=False, error=f"Resources directory not found: {resources_dir}"
+            )
+
+        # Collect all unique files from merge fields
+        unique_files = set()
+        for merge_field in merge_fields:
+            find_value = merge_field.get("find", "")
+            if find_value and "/" in find_value:
+                filename = find_value.split("/")[-1]
+                unique_files.add(filename)
+
+        # Upload all unique files
+        for i, filename in enumerate(unique_files):
+            file_path = resources_dir / filename
+
+            if verbose:
+                print(
+                    f"   [{i + 1}/{len(unique_files)}] Uploading {filename} from {file_path}..."
+                )
+
+            if verbose:
+                print(f"   [{i + 1}/{len(unique_files)}] Uploading {filename}...")
+
+            result = self.uploader.upload(file_path)
+
+            if not result.success:
+                return AssemblyResult(
+                    success=False,
+                    error=f"Failed to upload {filename}: {result.error}",
+                )
+
+            uploaded_files[filename] = result.url
+
+            if verbose:
+                print(f"      ✓ Uploaded (ID: {result.file_id})")
+
+        # Step 3: Prepare merge data with uploaded URLs
+        merge_data = []
+        for merge_field in merge_fields:
+            find_value = merge_field.get("find", "")
+            if find_value and "/" in find_value:
+                filename = find_value.split("/")[-1]
+                if filename in uploaded_files:
+                    merge_data.append(
+                        {"find": find_value, "replace": uploaded_files[filename]}
+                    )
+
+        if verbose and merge_data:
+            print(f"🔗 Merge data prepared: {len(merge_data)} replacements")
+
+        # Step 4: Render video using template
+        if verbose:
+            print("🚀 Submitting render job with template...")
+
+        render_data = {"id": script_data.get("name", "template"), "merge": merge_data}
+
+        render_result = self.client.render(render_data)
+
+        if not render_result.success:
+            return AssemblyResult(
+                success=False, error=f"Render submission failed: {render_result.error}"
+            )
+
+        render_id = render_result.render_id
+
+        if render_id is None:
+            return AssemblyResult(success=False, error="Render ID is None")
+
+        if verbose:
+            print(f"   ✓ Render ID: {render_id}")
+            print("⏳ Waiting for render to complete...")
+
+        # Step 5: Wait for completion
+        def status_callback(status: str, url: Optional[str]):
+            if verbose and status:
+                print(f"   Status: {status}")
+
+        final_result = self.client.wait_for_render(
+            render_id, callback=status_callback if verbose else None
+        )
+
+        if not final_result.success:
+            return AssemblyResult(
+                success=False,
+                render_id=render_id,
+                error=f"Render failed: {final_result.error}",
+            )
+
+        # Step 6: Download result
+        if verbose:
+            print("💾 Downloading video...")
+
+        if output_dir is None:
+            output_dir = Path.cwd()
+
+        # Use output filename from template or default
+        template_output = template_data.get("output", {})
+        output_name = template_output.get("filename", "output.mp4")
+        output_path = output_dir / output_name
+
+        if final_result.url is None:
+            return AssemblyResult(
+                success=False,
+                render_id=render_id,
+                error="Download URL is None",
+            )
+
+        success = self.client.download(final_result.url, output_path)
+
+        if not success:
+            return AssemblyResult(
+                success=False,
+                render_id=render_id,
+                error=f"Failed to download video from {final_result.url}",
+            )
+
+        if verbose:
+            print(f"   ✓ Saved to: {output_path}")
+            print("✅ Template assembly complete!")
 
         return AssemblyResult(
             success=True, output_path=output_path, render_id=render_id

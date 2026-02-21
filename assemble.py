@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fast-Clip Video Assembler CLI."""
 
+import json
 import sys
 import os
 from pathlib import Path
@@ -91,7 +92,19 @@ def main():
     print("")
 
     assembler = VideoAssembler(api_key)
-    result = assembler.assemble(script_path, output_dir, verbose=verbose)
+
+    # Check if script is template format
+    with open(script_path, "r") as f:
+        script_data = json.load(f)
+
+    if "template" in script_data:
+        print("📋 Using template + merge workflow")
+        result = assembler.assemble_with_template(
+            script_path, output_dir, verbose=verbose
+        )
+    else:
+        print("📋 Using direct workflow")
+        result = assembler.assemble(script_path, output_dir, verbose=verbose)
 
     if result.success:
         print("")

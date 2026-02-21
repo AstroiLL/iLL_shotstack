@@ -348,11 +348,32 @@ def md_to_shotstack(md_path: Path) -> dict:
         output_format_match, resolution_match, aspect_match, fps_match, thumbnail_match
     )
 
+    # Generate merge fields for all assets - simple approach
+    merge_fields = []
+
+    # Add video clips to merge
+    for clip in clips:
+        src = clip["asset"]["src"]
+        if src.startswith("{{") and src.endswith("}}"):
+            # Extract template variable from {{Content/filename}}
+            template_var = src[2:-2]  # Remove {{}}
+            merge_fields.append({"find": template_var, "replace": ""})
+
+    # Add sound effects to merge
+    for audio in sound_effects:
+        src = audio["asset"]["src"]
+        if src.startswith("{{") and src.endswith("}}"):
+            template_var = src[2:-2]
+            merge_fields.append({"find": template_var, "replace": ""})
+
     return {
         "name": name,
-        "resourcesDir": resources_dir,
-        "timeline": timeline,
-        "output": output,
+        "resourcesDir": resources_dir,  # Add resourcesDir to main level
+        "template": {
+            "timeline": timeline,
+            "output": output,
+        },
+        "merge": merge_fields,
     }
 
 
