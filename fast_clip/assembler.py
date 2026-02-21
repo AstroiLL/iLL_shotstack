@@ -192,13 +192,8 @@ class VideoAssembler:
         if verbose:
             print("💾 Downloading video...")
 
-        if output_dir is None:
-            output_dir = Path.cwd()
-
-        # Use output filename from script or default
-        output_config = script_data.get("output", {})
-        output_name = output_config.get("filename", "output.mp4")
-        output_path = output_dir / output_name
+        # Generate output path based on script name
+        output_path = self._generate_output_path(script_path, output_dir)
 
         if final_result.url is None:
             return AssemblyResult(
@@ -223,6 +218,36 @@ class VideoAssembler:
         return AssemblyResult(
             success=True, output_path=output_path, render_id=render_id
         )
+
+    def _generate_output_path(
+        self, script_path: Path, output_dir: Optional[Path] = None
+    ) -> Path:
+        """Generate output path based on script name with index support.
+
+        Args:
+            script_path: Path to input script
+            output_dir: Output directory (default: current directory)
+
+        Returns:
+            Path for output video file
+        """
+        if output_dir is None:
+            output_dir = Path.cwd()
+
+        # Get base name from script (e.g., "hello.json" -> "hello")
+        base_name = script_path.stem
+
+        # Start with base name + .mp4
+        output_path = output_dir / f"{base_name}.mp4"
+
+        # If file exists, find next available index
+        counter = 1
+        original_path = output_path
+        while output_path.exists():
+            output_path = output_dir / f"{base_name}_{counter}.mp4"
+            counter += 1
+
+        return output_path
 
     def _verify_script(self, script_data: dict, script_path: Path) -> tuple[bool, str]:
         """Verify script structure and resources.
@@ -530,13 +555,8 @@ class VideoAssembler:
         if verbose:
             print("💾 Downloading video...")
 
-        if output_dir is None:
-            output_dir = Path.cwd()
-
-        # Use output filename from template or default
-        template_output = template_data.get("output", {})
-        output_name = template_output.get("filename", "output.mp4")
-        output_path = output_dir / output_name
+        # Generate output path based on script name
+        output_path = self._generate_output_path(script_path, output_dir)
 
         if final_result.url is None:
             return AssemblyResult(

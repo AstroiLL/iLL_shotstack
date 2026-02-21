@@ -10,7 +10,7 @@
                     {
                         "asset": {
                             "type": "text",
-                            "text": "HELLO WORLD",
+                            "text": "Привет, это Контент-завод!",
                             "font": {
                                 "family": "Montserrat ExtraBold",
                                 "color": "#ffffff",
