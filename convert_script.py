@@ -167,8 +167,8 @@ def build_output_config(
     else:
         output["fps"] = 30  # Default for Reels
 
-    if thumbnail_match:
-        output["thumbnail"] = {"capture": int(thumbnail_match.group(1).strip())}
+    # Note: thumbnail removed as it causes validation errors
+    # Shotstack API requires additional scale parameter for thumbnail
 
     return output
 
@@ -235,15 +235,9 @@ def build_clip_with_text(
     if transition:
         clip["transition"] = transition
 
-    # Add text overlay if text is provided
-    if text and text.strip():
-        clip["asset"]["overlay"] = {
-            "type": "title",
-            "text": text.strip(),
-            "style": "minimal",
-            "position": "bottom",
-            "size": "small",
-        }
+    # Note: Text overlays should be separate title clips on another track
+    # For now, we skip overlay in asset as it's not supported by Shotstack API
+    # Text information is preserved in the markdown for future implementation
 
     return clip
 

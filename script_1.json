@@ -10,14 +10,7 @@
               "asset": {
                 "type": "video",
                 "src": "{{Content/1-Avatar.mov}}",
-                "trim": 0,
-                "overlay": {
-                  "type": "title",
-                  "text": "Тратишь 3 часа на рилс",
-                  "style": "minimal",
-                  "position": "bottom",
-                  "size": "small"
-                }
+                "trim": 0
               },
               "start": 0.0,
               "length": 1.8,
@@ -31,14 +24,7 @@
               "asset": {
                 "type": "video",
                 "src": "{{Content/1-Avatar.mov}}",
-                "trim": 860,
-                "overlay": {
-                  "type": "title",
-                  "text": "Ты уже проиграл",
-                  "style": "minimal",
-                  "position": "bottom",
-                  "size": "small"
-                }
+                "trim": 860
               },
               "start": 1.8,
               "length": 1.2,
@@ -48,14 +34,7 @@
               "asset": {
                 "type": "video",
                 "src": "{{Content/2-Ustal.mp4}}",
-                "trim": 180,
-                "overlay": {
-                  "type": "title",
-                  "text": "Монтаж до 2 ночи",
-                  "style": "minimal",
-                  "position": "bottom",
-                  "size": "small"
-                }
+                "trim": 180
               },
               "start": 3.0,
               "length": 1.5,
@@ -65,14 +44,7 @@
               "asset": {
                 "type": "video",
                 "src": "{{Content/3-Girl.mp4}}",
-                "trim": 740,
-                "overlay": {
-                  "type": "title",
-                  "text": "Пост раз в неделю",
-                  "style": "minimal",
-                  "position": "bottom",
-                  "size": "small"
-                }
+                "trim": 740
               },
               "start": 4.5,
               "length": 1.6,
@@ -82,14 +54,7 @@
               "asset": {
                 "type": "video",
                 "src": "{{Content/1-Avatar.mov}}",
-                "trim": 460,
-                "overlay": {
-                  "type": "title",
-                  "text": "А другие постят каждый день",
-                  "style": "minimal",
-                  "position": "bottom",
-                  "size": "small"
-                }
+                "trim": 460
               },
               "start": 6.1,
               "length": 2.2,
@@ -99,14 +64,7 @@
               "asset": {
                 "type": "video",
                 "src": "{{Content/1-Avatar.mov}}",
-                "trim": 780,
-                "overlay": {
-                  "type": "title",
-                  "text": "Эксперты подключают",
-                  "style": "minimal",
-                  "position": "bottom",
-                  "size": "small"
-                }
+                "trim": 780
               },
               "start": 8.3,
               "length": 1.6,
@@ -116,14 +74,7 @@
               "asset": {
                 "type": "video",
                 "src": "{{Content/4-Content.mov}}",
-                "trim": 1440,
-                "overlay": {
-                  "type": "title",
-                  "text": "Контент завод",
-                  "style": "minimal",
-                  "position": "bottom",
-                  "size": "small"
-                }
+                "trim": 1440
               },
               "start": 9.9,
               "length": 1.0,
@@ -133,14 +84,7 @@
               "asset": {
                 "type": "video",
                 "src": "{{Content/1-Avatar.mov}}",
-                "trim": 1500,
-                "overlay": {
-                  "type": "title",
-                  "text": "Результат 20 видео за вечер",
-                  "style": "minimal",
-                  "position": "bottom",
-                  "size": "small"
-                }
+                "trim": 1500
               },
               "start": 10.9,
               "length": 2.5,
@@ -154,14 +98,7 @@
               "asset": {
                 "type": "video",
                 "src": "{{Content/5-Analitic.mp4}}",
-                "trim": 1180,
-                "overlay": {
-                  "type": "title",
-                  "text": "Заявок стало в 4 раза больше",
-                  "style": "minimal",
-                  "position": "bottom",
-                  "size": "small"
-                }
+                "trim": 1180
               },
               "start": 13.4,
               "length": 3.0,
@@ -171,14 +108,7 @@
               "asset": {
                 "type": "video",
                 "src": "{{Content/1-Avatar.mov}}",
-                "trim": 1360,
-                "overlay": {
-                  "type": "title",
-                  "text": "Ты как и дальше вручную",
-                  "style": "minimal",
-                  "position": "bottom",
-                  "size": "small"
-                }
+                "trim": 1360
               },
               "start": 16.4,
               "length": 2.1,
@@ -195,7 +125,7 @@
             {
               "asset": {
                 "type": "audio",
-                "src": "{{Content/clic.wav}}",
+                "src": "{{Content/click.wav}}",
                 "volume": 0.7
               },
               "start": 1.8,
@@ -222,7 +152,7 @@
             {
               "asset": {
                 "type": "audio",
-                "src": "{{Content/clic.wav}}",
+                "src": "{{Content/click.wav}}",
                 "volume": 0.7
               },
               "start": 8.3,
@@ -264,10 +194,7 @@
       "format": "mp4",
       "resolution": "sd",
       "aspectRatio": "9:16",
-      "fps": 30,
-      "thumbnail": {
-        "capture": 1
-      }
+      "fps": 30
     }
   },
   "merge": [
@@ -312,7 +239,7 @@
       "replace": ""
     },
     {
-      "find": "Content/clic.wav",
+      "find": "Content/click.wav",
       "replace": ""
     },
     {
@@ -324,7 +251,7 @@
       "replace": ""
     },
     {
-      "find": "Content/clic.wav",
+      "find": "Content/click.wav",
       "replace": ""
     },
     {

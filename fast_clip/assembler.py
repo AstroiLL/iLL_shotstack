@@ -224,32 +224,119 @@ class VideoAssembler:
             success=True, output_path=output_path, render_id=render_id
         )
 
+    def _verify_script(self, script_data: dict, script_path: Path) -> tuple[bool, str]:
+        """Verify script structure and resources.
+
+        Args:
+            script_data: Loaded script data
+            script_path: Path to script file
+
+        Returns:
+            (success, error_message)
+        """
+        errors = []
+
+        # Check required fields
+        if "template" not in script_data:
+            errors.append("Missing required field: 'template'")
+        else:
+            template = script_data["template"]
+            if "timeline" not in template:
+                errors.append("Missing required field: 'template.timeline'")
+            if "output" not in template:
+                errors.append("Missing required field: 'template.output'")
+
+        if "merge" not in script_data:
+            errors.append("Missing required field: 'merge'")
+        elif not isinstance(script_data["merge"], list):
+            errors.append("Field 'merge' must be an array")
+        elif len(script_data["merge"]) == 0:
+            errors.append("Field 'merge' is empty - no resources to process")
+
+        # Check resources directory
+        script_dir = script_path.parent
+        resources_dir_name = script_data.get("resourcesDir", ".")
+        if "template" in script_data and isinstance(script_data["template"], dict):
+            resources_dir_name = script_data["template"].get(
+                "resourcesDir", resources_dir_name
+            )
+        resources_dir = script_dir / resources_dir_name
+
+        if not resources_dir.exists():
+            errors.append(f"Resources directory not found: {resources_dir}")
+        elif not resources_dir.is_dir():
+            errors.append(f"Resources path is not a directory: {resources_dir}")
+
+        # Check all files from merge fields exist
+        if "merge" in script_data and isinstance(script_data["merge"], list):
+            missing_files = []
+            invalid_extensions = []
+            supported_video = {".mp4", ".mov", ".avi", ".mkv"}
+            supported_audio = {".mp3", ".wav", ".aac", ".ogg"}
+            supported_image = {".jpg", ".jpeg", ".png", ".gif"}
+            supported = supported_video | supported_audio | supported_image
+
+            for merge_field in script_data["merge"]:
+                if isinstance(merge_field, dict):
+                    find_value = merge_field.get("find", "")
+                    if find_value and "/" in find_value:
+                        filename = find_value.split("/")[-1]
+                        file_path = resources_dir / filename
+
+                        if not file_path.exists():
+                            missing_files.append(filename)
+
+                        # Check extension
+                        ext = Path(filename).suffix.lower()
+                        if ext and ext not in supported:
+                            invalid_extensions.append(f"{filename} ({ext})")
+
+            if missing_files:
+                errors.append(
+                    f"Missing files ({len(missing_files)}): {', '.join(missing_files[:5])}"
+                )
+                if len(missing_files) > 5:
+                    errors.append(f"  ... and {len(missing_files) - 5} more")
+
+            if invalid_extensions:
+                errors.append(
+                    f"Unsupported file formats: {', '.join(invalid_extensions[:3])}"
+                )
+
+        # Check timeline structure
+        if "template" in script_data and isinstance(script_data["template"], dict):
+            timeline = script_data["template"].get("timeline", {})
+            tracks = timeline.get("tracks", [])
+
+            if not tracks:
+                errors.append("No tracks found in timeline")
+            else:
+                total_clips = 0
+                for i, track in enumerate(tracks):
+                    clips = track.get("clips", [])
+                    total_clips += len(clips)
+
+                    for j, clip in enumerate(clips):
+                        # Validate clip structure
+                        if "asset" not in clip:
+                            errors.append(f"Track {i}, clip {j}: missing 'asset'")
+                        elif "src" not in clip["asset"]:
+                            errors.append(f"Track {i}, clip {j}: missing 'asset.src'")
+
+                if total_clips == 0:
+                    errors.append("No clips found in any track")
+
+        if errors:
+            return False, "\n".join(errors)
+
+        return True, ""
+
     def assemble_with_template(
         self,
         script_path: Path,
         output_dir: Optional[Path] = None,
         verbose: bool = False,
     ) -> AssemblyResult:
-        """Assemble video from script using template + merge workflow.
-
-        Args:
-            script_path: Path to JSON script with template
-            output_dir: Where to save output (default: current directory)
-            verbose: Print progress
-
-        Returns:
-            AssemblyResult with status
-        """
-        """Assemble video from script using template + merge workflow.
-
-        Args:
-            script_path: Path to JSON script with template
-            output_dir: Where to save output (default: current directory)
-            verbose: Print progress
-
-        Returns:
-            AssemblyResult with status
-        """
         script_path = Path(script_path)
 
         # Step 1: Load and validate script
@@ -265,6 +352,21 @@ class VideoAssembler:
             )
         except json.JSONDecodeError as e:
             return AssemblyResult(success=False, error=f"Invalid JSON: {e}")
+
+        # Verify script structure and resources
+        if verbose:
+            print("🔍 Verifying script...")
+
+        is_valid, error_msg = self._verify_script(script_data, script_path)
+        if not is_valid:
+            return AssemblyResult(
+                success=False, error=f"Script verification failed:\n{error_msg}"
+            )
+
+        if verbose:
+            print("   ✓ Script structure valid")
+            merge_count = len(script_data.get("merge", []))
+            print(f"   ✓ Found {merge_count} resources to process")
 
         # Check if this is a template format
         if "template" not in script_data:
@@ -328,24 +430,69 @@ class VideoAssembler:
                 print(f"      ✓ Uploaded (ID: {result.file_id})")
 
         # Step 3: Prepare merge data with uploaded URLs
+        # Note: find should be without {{}} and match the placeholder name in timeline
         merge_data = []
         for merge_field in merge_fields:
-            find_value = merge_field.get("find", "")
-            if find_value and "/" in find_value:
-                filename = find_value.split("/")[-1]
-                if filename in uploaded_files:
-                    merge_data.append(
-                        {"find": find_value, "replace": uploaded_files[filename]}
-                    )
+            if isinstance(merge_field, dict):
+                find_value = merge_field.get("find", "")
+                if find_value and "/" in find_value:
+                    filename = find_value.split("/")[-1]
+                    if filename in uploaded_files:
+                        # Use just the filename (without Content/) as find value
+                        merge_data.append(
+                            {"find": filename, "replace": uploaded_files[filename]}
+                        )
+                        if verbose:
+                            print(
+                                f"   ✓ Prepared merge: {filename} -> {uploaded_files[filename][:50]}..."
+                            )
 
         if verbose and merge_data:
             print(f"🔗 Merge data prepared: {len(merge_data)} replacements")
 
-        # Step 4: Render video using template
+        # Step 4: Replace placeholders in timeline and render
         if verbose:
-            print("🚀 Submitting render job with template...")
+            print("🚀 Preparing timeline for render...")
 
-        render_data = {"id": script_data.get("name", "template"), "merge": merge_data}
+        # Deep copy timeline and replace placeholders with URLs
+        import copy
+
+        timeline = copy.deepcopy(template_data.get("timeline", {}))
+
+        def replace_placeholders(obj):
+            if isinstance(obj, str):
+                # Replace {{Content/filename}} with URL using filename as key
+                for merge_item in merge_data:
+                    # Match {{Content/filename}} pattern
+                    placeholder_with_path = "{{Content/" + merge_item["find"] + "}}"
+                    placeholder_simple = "{{" + merge_item["find"] + "}}"
+                    if placeholder_with_path in obj:
+                        obj = obj.replace(placeholder_with_path, merge_item["replace"])
+                    elif placeholder_simple in obj:
+                        obj = obj.replace(placeholder_simple, merge_item["replace"])
+                return obj
+            elif isinstance(obj, dict):
+                return {k: replace_placeholders(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [replace_placeholders(item) for item in obj]
+            return obj
+
+        timeline = replace_placeholders(timeline)
+
+        # Prepare render data with timeline, output, and merge
+        render_data = {
+            "timeline": timeline,
+            "output": template_data.get("output", {}),
+            "merge": [],
+        }
+
+        if verbose:
+            tracks_count = (
+                len(timeline.get("tracks", [])) if isinstance(timeline, dict) else 0
+            )
+            print(f"   Template tracks: {tracks_count}")
+            print(f"   Replacements applied: {len(merge_data)}")
+            print("🎬 Submitting render job...")
 
         render_result = self.client.render(render_data)
 

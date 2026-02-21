@@ -1,0 +1,41 @@
+{
+  "name": "SingleTest",
+  "resourcesDir": "Content",
+  "template": {
+    "timeline": {
+      "tracks": [
+        {
+          "clips": [
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{Content/1-Avatar.mov}}",
+                "trim": 0
+              },
+              "start": 0.0,
+              "length": 3.0,
+              "fit": "cover",
+              "effect": "zoomIn",
+              "transition": {
+                "in": "zoom"
+              }
+            }
+          ]
+        }
+      ],
+      "background": "#000000"
+    },
+    "output": {
+      "format": "mp4",
+      "resolution": "sd",
+      "aspectRatio": "9:16",
+      "fps": 30
+    }
+  },
+  "merge": [
+    {
+      "find": "Content/1-Avatar.mov",
+      "replace": ""
+    }
+  ]
+}
