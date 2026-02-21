@@ -188,10 +188,14 @@ def build_clip_with_text(
         "video" if clip_file.endswith((".mp4", ".avi", ".mov", ".mkv")) else "image"
     )
 
+    # In script_content.md, clip_file contains just filename (no path)
+    # Always add resources_dir for Shotstack format
+    src = f"{{{{{resources_dir}/{clip_file}}}}}"
+
     clip: Dict[str, Any] = {
         "asset": {
             "type": media_type,
-            "src": f"{{{resources_dir}/{clip_file}}}",
+            "src": src,
         },
         "start": start_time,
         "length": duration,
@@ -207,19 +211,22 @@ def build_clip_with_text(
         except ValueError:
             pass  # Skip trim if timing format is invalid
 
-    # Add transitions (optimized for Reels)
+    # Add transitions and effects (optimized for Reels per 2-Stage.md)
     transition = {}
-    # Use fadeFast for most transitions in Reels
-    if effect and effect.lower() in ["fadein", "fade"]:
-        transition["in"] = "fadeFast"
-    elif effect and effect.lower() in ["fadeout"]:
-        transition["out"] = "fadeFast"
-    elif effect and effect.lower() in ["zoomin"]:
-        transition["in"] = "zoom"
-        clip["effect"] = "zoomIn"
-    elif effect and effect.lower() in ["zoomout"]:
-        transition["out"] = "zoom"
-        clip["effect"] = "zoomOut"
+
+    if effect and effect.lower():
+        if effect.lower() in ["fadein", "fade"]:
+            transition["in"] = "fadeFast"
+        elif effect.lower() in ["fadeout"]:
+            transition["out"] = "fadeFast"
+        elif effect.lower() == "zoomin":
+            transition["in"] = "zoom"
+            clip["effect"] = "zoomIn"
+        elif effect.lower() == "zoomout":
+            transition["out"] = "zoom"
+            clip["effect"] = "zoomOut"
+        elif effect.lower() in ["fade"]:
+            transition["in"] = "fadeFast"
 
     if transition:
         clip["transition"] = transition
@@ -247,10 +254,14 @@ def build_sound_effect_clip(
     """Build sound effect clip."""
     duration = parse_duration(duration_str)
 
+    # In script_content.md, sound_effect contains just filename (no path)
+    # Always add resources_dir for Shotstack format
+    src = f"{{{{{resources_dir}/{sound_effect}}}}}"
+
     return {
         "asset": {
             "type": "audio",
-            "src": f"{{{resources_dir}/{sound_effect}}}",
+            "src": src,
             "volume": 0.7,  # Default volume for sound effects
         },
         "start": start_time,
@@ -409,8 +420,19 @@ def convert_file(input_path: Path, output_path: Optional[Path] = None) -> Path:
     # MD to Shotstack JSON
     shotstack_data = md_to_shotstack(input_path)
 
+    # Generate output path with index if file exists
     if output_path is None:
         output_path = input_path.with_suffix(".json")
+
+    # If output file exists, create new with index
+    counter = 1
+    original_output_path = output_path
+    while output_path.exists():
+        stem = original_output_path.stem
+        suffix = original_output_path.suffix
+        parent = original_output_path.parent
+        output_path = parent / f"{stem}_{counter}{suffix}"
+        counter += 1
 
     output_path.write_text(
         json.dumps(shotstack_data, indent=2, ensure_ascii=False),
@@ -419,7 +441,15 @@ def convert_file(input_path: Path, output_path: Optional[Path] = None) -> Path:
     print(f"Converted: {input_path} -> {output_path}")
     print(f"Name: {shotstack_data['name']}")
     print(f"Resources: {shotstack_data['resourcesDir']}")
-    print(f"Clips: {len(shotstack_data['timeline']['tracks'][0]['clips'])}")
+
+    # Count video clips (not audio)
+    video_clips_count = 0
+    for track in shotstack_data["timeline"]["tracks"]:
+        if track["clips"] and track["clips"][0]["asset"]["type"] != "audio":
+            video_clips_count = len(track["clips"])
+            break
+
+    print(f"Clips: {video_clips_count}")
 
     return output_path
 
