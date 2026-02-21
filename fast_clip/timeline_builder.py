@@ -27,7 +27,7 @@ class TimelineBuilder:
         """Recursively resolve {{placeholder}} patterns in data."""
         if isinstance(data, str):
             # Match {{resources_dir/filename}} pattern
-            match = re.match(r"^\{\{([^}]+)\}\}$", data)
+            match = re.match(r"^\{\{([^}]+)\}\}$", src)
             if match:
                 resource_path = match.group(1)
                 if resource_path in self.uploaded_urls:

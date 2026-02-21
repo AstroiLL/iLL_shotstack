@@ -86,7 +86,9 @@ def parse_new_table(content: str, resources_dir: str) -> tuple[List[dict], List[
                     timing_str = cells[4]
                     duration_str = cells[5]
                     effect = cells[6].lower() if cells[6] else None
-                    # music_effect = cells[7].lower() if cells[7] else None  # Not used in current implementation
+                    sound_effect = (
+                        cells[8].lower() if cells[8] else None
+                    )  # New: add sound effects
                     sound_effect = (
                         cells[8].lower() if len(cells) > 8 and cells[8] else None
                     )
@@ -101,6 +103,7 @@ def parse_new_table(content: str, resources_dir: str) -> tuple[List[dict], List[
                         description,
                         resources_dir,
                         start_time,
+                        sound_effects,
                     )
                     clips.append(clip)
 
@@ -179,6 +182,7 @@ def build_clip_with_text(
     description: str,
     resources_dir: str,
     start_time: float,
+    sound_effects: Optional[list] = None,
 ) -> Dict[str, Any]:
     """Build video clip with text overlay for new format."""
     duration = parse_duration(duration_str)
@@ -460,15 +464,20 @@ def convert_file(input_path: Path, output_path: Optional[Path] = None) -> Path:
         encoding="utf-8",
     )
     print(f"Converted: {input_path} -> {output_path}")
-    print(f"Name: {shotstack_data['name']}")
-    print(f"Resources: {shotstack_data['resourcesDir']}")
+    print(f"Name: {shotstack_data.get('name', 'Unknown')}")
+    print(f"Resources: {shotstack_data.get('resourcesDir', 'Unknown')}")
 
     # Count video clips (not audio)
     video_clips_count = 0
-    for track in shotstack_data["timeline"]["tracks"]:
-        if track["clips"] and track["clips"][0]["asset"]["type"] != "audio":
-            video_clips_count = len(track["clips"])
-            break
+    timeline = shotstack_data.get("timeline", {})
+    tracks = timeline.get("tracks", [])
+    for track in tracks:
+        clips = track.get("clips", [])
+        for clip in clips:
+            asset = clip.get("asset", {})
+            if asset.get("type") != "audio":
+                video_clips_count += 1
+                break
 
     print(f"Clips: {video_clips_count}")
 
@@ -492,8 +501,11 @@ def json_to_md(json_path: Path) -> Path:
     name = data.get("name", "Untitled")
     resources_dir = data.get("resourcesDir", ".")
 
-    # Extract timeline data
-    timeline = data.get("timeline", {})
+    # Extract timeline data (handle both old format and template format)
+    if "template" in data:
+        timeline = data.get("template", {}).get("timeline", {})
+    else:
+        timeline = data.get("timeline", {})
     soundtrack = timeline.get("soundtrack", {})
     background = timeline.get("background", "#000000")
 
@@ -543,7 +555,9 @@ def json_to_md(json_path: Path) -> Path:
         clips = track.get("clips", [])
         for clip in clips:
             asset = clip.get("asset", {})
-            if asset.get("type") == "audio":
+            # Default to video type if type not specified
+            asset_type = asset.get("type", "video")
+            if asset_type == "audio":
                 audio_clips.append(clip)
             else:
                 video_clips.append(clip)
@@ -552,22 +566,28 @@ def json_to_md(json_path: Path) -> Path:
     row_num = 1
     for i, clip in enumerate(video_clips):
         asset = clip.get("asset", {})
+        if asset.get("type") != "audio":  # Only process video clips
+            src = asset.get("src", "")
 
         # Extract clip info
         src = asset.get("src", "")
         if src.startswith("{{") and src.endswith("}}"):
-            filename = src[2:-2].split("/", 1)[1] if "/" in src[2:-2] else src[2:-2]
+            video_filename = (
+                src[2:-2].split("/", 1)[1] if "/" in src[2:-2] else src[2:-2]
+            )
         elif src.startswith("{") and src.endswith("}"):
-            filename = src[1:-1].split("/", 1)[1] if "/" in src[1:-1] else src[1:-1]
+            video_filename = (
+                src[1:-1].split("/", 1)[1] if "/" in src[1:-1] else src[1:-1]
+            )
         else:
-            filename = src
+            video_filename = src
 
         # Extract text overlay
         overlay = asset.get("overlay", {})
         text = overlay.get("text", "") if overlay else ""
 
         # Generate description from filename or overlay
-        description = overlay.get("text", "") if overlay else filename
+        description = overlay.get("text", "") if overlay else video_filename
 
         # Calculate timing
         start = clip.get("start", 0)
@@ -595,30 +615,41 @@ def json_to_md(json_path: Path) -> Path:
 
         # Find matching sound effect
         sound_effect = ""
-        for audio_clip in audio_clips:
-            audio_start = audio_clip.get("start", 0)
-            if abs(audio_start - start) < 0.1:  # Match if start times are close
-                audio_src = audio_clip.get("asset", {}).get("src", "")
-                if audio_src.startswith("{{") and audio_src.endswith("}}"):
-                    sound_effect = (
-                        audio_src[2:-2].split("/", 1)[1]
-                        if "/" in audio_src[2:-2]
-                        else audio_src[2:-2]
-                    )
-                elif audio_src.startswith("{") and audio_src.endswith("}"):
-                    sound_effect = (
-                        audio_src[1:-1].split("/", 1)[1]
-                        if "/" in audio_src[1:-1]
-                        else audio_src[1:-1]
-                    )
-                break
+        if audio_clips and len(audio_clips) > 0:
+            # Try to match by exact timing first
+            for audio_clip in audio_clips:
+                audio_start = audio_clip.get("start", 0)
+                if abs(start - audio_start) < 0.1:
+                    audio_src = audio_clip.get("asset", {}).get("src", "")
+                    if audio_src.startswith("{{") and audio_src.endswith("}}"):
+                        filename = (
+                            audio_src[2:-2].split("/", 1)[1]
+                            if "/" in audio_src[2:-2]
+                            else audio_src[2:-2]
+                        )
+                    elif audio_src.startswith("{") and audio_src.endswith("}"):
+                        filename = (
+                            audio_src[1:-1].split("/", 1)[1]
+                            if "/" in audio_src[1:-1]
+                            else audio_src[1:-1]
+                        )
+                    else:
+                        filename = ""
 
-        # Debug output
+                    # Check if filename matches what we expect from MD table
+                    expected_filenames = [
+                        "clic.wav",
+                        "whoosh.wav",
+                        "camera-shutter.wav",
+                    ]
+                    if filename in expected_filenames:
+                        sound_effect = filename
+                        break
 
         # Build table row with proper spacing to match header
         text_field = f"{text:<29}"
         desc_field = f"{description:<20}"
-        clip_field = f"{filename:<14}"
+        clip_field = f"{video_filename:<14}"
         timing_field = f"{timing:<17}"
         dur_field = f"{duration:<8}"
         effect_field = f"{effect:<7}"
@@ -640,8 +671,17 @@ def json_to_md(json_path: Path) -> Path:
         ]
     )
 
-    # Write markdown file
+    # Write markdown file with indexing if file exists
     output_path = json_path.with_suffix(".md")
+    counter = 1
+    original_output_path = output_path
+    while output_path.exists():
+        stem = original_output_path.stem
+        suffix = original_output_path.suffix
+        parent = original_output_path.parent
+        output_path = parent / f"{stem}_{counter}{suffix}"
+        counter += 1
+
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
@@ -665,34 +705,32 @@ def format_duration(seconds: float) -> str:
 def main():
     """Main entry point."""
     if len(sys.argv) < 2:
-        print("Usage: python convert_script.py <input.md> [output.json]")
+        print("Usage: python convert_script.py <input> [output]")
         print("       python convert_script.py script.md")
+        print("       python convert_script.py script.json")
         print("       python convert_script.py script.md output.json")
-        print("       python convert_script.py --json-to-md <input.json>")
         sys.exit(1)
 
-    if sys.argv[1] == "--json-to-md":
-        if len(sys.argv) < 3:
-            print("Error: Missing input JSON file")
-            sys.exit(1)
+    input_file = Path(sys.argv[1])
+    output_file = Path(sys.argv[2]) if len(sys.argv) > 2 else None
 
-        input_file = Path(sys.argv[2])
-        try:
-            result = json_to_md(input_file)
-            print(f"Success! Output: {result}")
-        except Exception as e:
-            print(f"Error: {e}")
-            sys.exit(1)
-    else:
-        input_file = Path(sys.argv[1])
-        output_file = Path(sys.argv[2]) if len(sys.argv) > 2 else None
-
-        try:
+    try:
+        # Auto-detect format based on file extension
+        if input_file.suffix == ".md":
+            # Convert MD to JSON
             result = convert_file(input_file, output_file)
             print(f"Success! Output: {result}")
-        except Exception as e:
-            print(f"Error: {e}")
+        elif input_file.suffix == ".json":
+            # Convert JSON to MD
+            result = json_to_md(input_file)
+            print(f"Success! Output: {result}")
+        else:
+            print(f"Error: Unsupported file format '{input_file.suffix}'")
+            print("Supported formats: .md, .json")
             sys.exit(1)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -282,8 +282,10 @@ class VideoAssembler:
 
         uploaded_files = {}
         script_dir = script_path.parent
-        resources_dir_name = script_data.get(
-            "resourcesDir", template_data.get("resourcesDir", ".")
+        # Get resources_dir from template data
+        template_data = script_data.get("template", {})
+        resources_dir_name = template_data.get(
+            "resourcesDir", script_data.get("resourcesDir", ".")
         )
         resources_dir = script_dir / resources_dir_name
 
@@ -311,9 +313,6 @@ class VideoAssembler:
                 print(
                     f"   [{i + 1}/{len(unique_files)}] Uploading {filename} from {file_path}..."
                 )
-
-            if verbose:
-                print(f"   [{i + 1}/{len(unique_files)}] Uploading {filename}...")
 
             result = self.uploader.upload(file_path)
 
