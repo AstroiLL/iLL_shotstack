@@ -203,7 +203,7 @@ Markdown Script → convert_script.py → Shotstack Template JSON → assemble.p
 ```
 
 **Описание колонок:**
-- `Text` - Текст для оверлея на видео
+- `Text` - Текст (сохраняется в скрипте для документации, не отображается в видео)
 - `Description` - Описание сцены (не в видео)
 - `Clip` - Имя файла видео
 - `Timing` - Временной интервал (MM:SS:mmm-MM:SS:mmm)
@@ -211,6 +211,10 @@ Markdown Script → convert_script.py → Shotstack Template JSON → assemble.p
 - `Effect` - Визуальный эффект (ZoomIn, FadeIn, FadeOut)
 - `Music effect` - Эффект для фоновой музыки
 - `Sound effect` - Звуковой эффект
+
+**⚠️ Ограничения:**
+- Текстовые оверлеи не поддерживаются в текущей версии (требуется реализация отдельных title клипов)
+- Thumbnail временно отключен (ошибка валидации Shotstack API)
 
 ### Shotstack-native JSON Format
 
@@ -406,6 +410,27 @@ logging.basicConfig(level=logging.DEBUG)
 curl -H "x-api-key: $SHOTSTACK_API_KEY" \
   https://api.shotstack.io/edit/stage/render/<render_id>
 ```
+
+## Известные ограничения
+
+### Текстовые оверлеи не поддерживаются
+
+**Статус:** Требуется доработка
+
+Shotstack API не поддерживает поле `overlay` внутри `asset`. Для добавления текстовых оверлеев необходимо реализовать отдельные title клипы на дополнительном треке.
+
+**Временное решение:** Текст сохраняется в скрипте для документации, но не отображается в видео.
+
+### Thumbnail отключен
+
+**Статус:** Ошибка валидации Shotstack API
+
+Параметр `thumbnail_capture` временно отключен, так как вызывает ошибку:
+```
+Invalid configuration at output.thumbnail.scale: Invalid input
+```
+
+**Временное решение:** Thumbnail не используется в выходном JSON.
 
 ## Troubleshooting
 
