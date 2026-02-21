@@ -1,6 +1,5 @@
 ## name: Content
 ## resources_dir: Content
-## soundtrack_volume: 0.5
 ## background: "#000000"
 
 | # |             Text            |    Description     |     Clip     |     Timing      |Duration|Effect |Music effect|   Sound effect   |

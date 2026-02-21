@@ -5,7 +5,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any, List
 
 
 # Valid Shotstack values
@@ -60,6 +60,212 @@ def parse_duration(duration_str: str) -> float:
     return float(duration_str)
 
 
+def parse_new_table(content: str, resources_dir: str) -> tuple[List[dict], List[dict]]:
+    """Parse new table format with text, descriptions, and sound effects."""
+    clips = []
+    sound_effects = []
+    lines = content.split("\n")
+    in_table = False
+    start_time = 0.0
+
+    for line in lines:
+        line = line.strip()
+        if "| #" in line and ("Text" in line or "Description" in line):
+            in_table = True
+            continue
+        if in_table and line.startswith("|---"):
+            continue
+        if in_table and line.startswith("|") and not line.startswith("|---"):
+            cells = [cell.strip() for cell in line.split("|")[1:-1]]
+            if len(cells) >= 8:
+                try:
+                    # cells: [#, Text, Description, Clip, Timing, Duration, Effect, Music effect, Sound effect]
+                    text = cells[1]
+                    description = cells[2]
+                    clip_file = cells[3]
+                    timing_str = cells[4]
+                    duration_str = cells[5]
+                    effect = cells[6].lower() if cells[6] else None
+                    # music_effect = cells[7].lower() if cells[7] else None  # Not used in current implementation
+                    sound_effect = (
+                        cells[8].lower() if len(cells) > 8 and cells[8] else None
+                    )
+
+                    # Build main video clip with text overlay
+                    clip = build_clip_with_text(
+                        clip_file,
+                        timing_str,
+                        duration_str,
+                        effect or "",
+                        text,
+                        description,
+                        resources_dir,
+                        start_time,
+                    )
+                    clips.append(clip)
+
+                    # Build sound effect clip if specified
+                    if sound_effect and sound_effect != "":
+                        sound_clip = build_sound_effect_clip(
+                            sound_effect,
+                            timing_str,
+                            duration_str,
+                            resources_dir,
+                            start_time,
+                        )
+                        sound_effects.append(sound_clip)
+
+                    # Update start time for next clip
+                    duration = parse_duration(duration_str)
+                    start_time += duration
+
+                except (ValueError, IndexError) as e:
+                    print(f"Warning: Skipping invalid row: {line} ({e})")
+                    continue
+
+    return clips, sound_effects
+
+
+def build_output_config(
+    output_format_match, resolution_match, aspect_match, fps_match, thumbnail_match
+) -> Dict[str, Any]:
+    """Build output configuration with optimized settings for Reels."""
+    output = {
+        "format": output_format_match.group(1).strip()
+        if output_format_match
+        else "mp4",
+        "resolution": "hd",  # Default to HD for better quality
+    }
+
+    if resolution_match:
+        resolution = resolution_match.group(1).strip()
+        # Map common resolutions to Shotstack format
+        if resolution in ["480p", "sd"]:
+            output["resolution"] = "sd"
+        elif resolution in ["720p", "hd"]:
+            output["resolution"] = "hd"
+        elif resolution in ["1080p", "fhd"]:
+            output["resolution"] = "fhd"
+        else:
+            output["resolution"] = resolution
+
+    if aspect_match:
+        aspect = aspect_match.group(1).strip()
+        if aspect in VALID_ASPECT_RATIOS:
+            output["aspectRatio"] = aspect
+        # Default to 9:16 for Reels
+        elif aspect == "9:16":
+            output["aspectRatio"] = "9:16"
+        else:
+            output["aspectRatio"] = "9:16"  # Reels default
+
+    if fps_match:
+        output["fps"] = int(fps_match.group(1).strip())
+    else:
+        output["fps"] = 30  # Default for Reels
+
+    if thumbnail_match:
+        output["thumbnail"] = {"capture": int(thumbnail_match.group(1).strip())}
+
+    return output
+
+
+def build_clip_with_text(
+    clip_file: str,
+    timing_str: str,
+    duration_str: str,
+    effect: str,
+    text: str,
+    description: str,
+    resources_dir: str,
+    start_time: float,
+) -> Dict[str, Any]:
+    """Build video clip with text overlay for new format."""
+    duration = parse_duration(duration_str)
+
+    # Determine media type
+    media_type = (
+        "video" if clip_file.endswith((".mp4", ".avi", ".mov", ".mkv")) else "image"
+    )
+
+    clip: Dict[str, Any] = {
+        "asset": {
+            "type": media_type,
+            "src": f"{{{resources_dir}/{clip_file}}}",
+        },
+        "start": start_time,
+        "length": duration,
+        "fit": "cover",  # Best for Reels
+    }
+
+    # Add trim for video files
+    if media_type == "video" and timing_str:
+        try:
+            trim_start = parse_timing_start(timing_str)
+            if trim_start is not None:
+                clip["asset"]["trim"] = trim_start
+        except ValueError:
+            pass  # Skip trim if timing format is invalid
+
+    # Add transitions (optimized for Reels)
+    transition = {}
+    # Use fadeFast for most transitions in Reels
+    if effect and effect.lower() in ["fadein", "fade"]:
+        transition["in"] = "fadeFast"
+    elif effect and effect.lower() in ["fadeout"]:
+        transition["out"] = "fadeFast"
+    elif effect and effect.lower() in ["zoomin"]:
+        transition["in"] = "zoom"
+        clip["effect"] = "zoomIn"
+    elif effect and effect.lower() in ["zoomout"]:
+        transition["out"] = "zoom"
+        clip["effect"] = "zoomOut"
+
+    if transition:
+        clip["transition"] = transition
+
+    # Add text overlay if text is provided
+    if text and text.strip():
+        clip["asset"]["overlay"] = {
+            "type": "title",
+            "text": text.strip(),
+            "style": "minimal",
+            "position": "bottom",
+            "size": "small",
+        }
+
+    return clip
+
+
+def build_sound_effect_clip(
+    sound_effect: str,
+    timing_str: str,
+    duration_str: str,
+    resources_dir: str,
+    start_time: float,
+) -> Dict[str, Any]:
+    """Build sound effect clip."""
+    duration = parse_duration(duration_str)
+
+    return {
+        "asset": {
+            "type": "audio",
+            "src": f"{{{resources_dir}/{sound_effect}}}",
+            "volume": 0.7,  # Default volume for sound effects
+        },
+        "start": start_time,
+        "length": duration,
+    }
+
+
+def parse_timing_start(timing_str: str) -> Optional[float]:
+    """Parse start time from timing string like '0:00:000-0:01:800'."""
+    if "-" in timing_str:
+        start_part = timing_str.split("-")[0]
+        return parse_time(start_part)
+    return None
+
+
 def parse_time(time_str: str) -> float:
     """Parse time string to seconds."""
     time_str = time_str.strip()
@@ -106,49 +312,30 @@ def md_to_shotstack(md_path: Path) -> dict:
         if soundtrack_vol_match:
             soundtrack["volume"] = float(soundtrack_vol_match.group(1).strip())
 
-    # Parse table
-    clips = []
-    lines = content.split("\n")
-    in_table = False
+    # Parse table with new format: Text, Description, Clip, Timing, Duration, Effect, Music effect, Sound effect
+    clips, sound_effects = parse_new_table(content, resources_dir)
 
-    for line in lines:
-        line = line.strip()
-        if line.startswith("| # "):
-            in_table = True
-            continue
-        if in_table and line.startswith("|---"):
-            continue
-        if in_table and line.startswith("|") and not line.startswith("|---"):
-            cells = [cell.strip() for cell in line.split("|")[1:-1]]
-            if len(cells) >= 9:
-                try:
-                    clip = build_clip(cells, resources_dir)
-                    clips.append(clip)
-                except (ValueError, IndexError) as e:
-                    print(f"Warning: Skipping invalid row: {line} ({e})")
-                    continue
+    # Build timeline with multiple tracks
+    tracks = []
 
-    # Build timeline
-    timeline: dict = {"tracks": [{"clips": clips}]}
+    # Main video track
+    if clips:
+        tracks.append({"clips": clips})
+
+    # Sound effects track
+    if sound_effects:
+        tracks.append({"clips": sound_effects})
+
+    timeline: dict = {"tracks": tracks}
     if soundtrack:
         timeline["soundtrack"] = soundtrack
     if background_match:
         timeline["background"] = background_match.group(1).strip()
 
-    # Build output
-    output = {
-        "format": output_format_match.group(1).strip() if output_format_match else "mp4"
-    }
-    if resolution_match:
-        output["resolution"] = resolution_match.group(1).strip()
-    if aspect_match:
-        aspect = aspect_match.group(1).strip()
-        if aspect in VALID_ASPECT_RATIOS:
-            output["aspectRatio"] = aspect
-    if fps_match:
-        output["fps"] = int(fps_match.group(1).strip())
-    if thumbnail_match:
-        output["thumbnail"] = {"capture": int(thumbnail_match.group(1).strip())}
+    # Build output with optimized settings for Reels
+    output = build_output_config(
+        output_format_match, resolution_match, aspect_match, fps_match, thumbnail_match
+    )
 
     return {
         "name": name,
@@ -158,8 +345,8 @@ def md_to_shotstack(md_path: Path) -> dict:
     }
 
 
-def build_clip(cells: list, resources_dir: str) -> dict:
-    """Build a Shotstack clip from table cells."""
+def build_clip(cells: List[str], resources_dir: str) -> dict:
+    """Build a Shotstack clip from old format table cells."""
     # cells: [#, Resource, Trim, Duration, Trans In, Effect, Filter, Trans Out, Volume, Description]
     resource = cells[1]
     trim_str = cells[2]
@@ -237,23 +424,224 @@ def convert_file(input_path: Path, output_path: Optional[Path] = None) -> Path:
     return output_path
 
 
+def json_to_md(json_path: Path) -> Path:
+    """Convert Shotstack JSON back to markdown format."""
+    json_path = Path(json_path)
+
+    if not json_path.exists():
+        raise FileNotFoundError(f"JSON file not found: {json_path}")
+
+    if json_path.suffix != ".json":
+        raise ValueError(f"Only .json files supported. Got: {json_path.suffix}")
+
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # Extract headers
+    name = data.get("name", "Untitled")
+    resources_dir = data.get("resourcesDir", ".")
+
+    # Extract timeline data
+    timeline = data.get("timeline", {})
+    soundtrack = timeline.get("soundtrack", {})
+    background = timeline.get("background", "#000000")
+
+    # Extract output settings
+    output = data.get("output", {})
+    output_format = output.get("format", "mp4")
+    resolution = output.get("resolution", "hd")
+    aspect_ratio = output.get("aspectRatio", "9:16")
+    fps = output.get("fps", 30)
+    thumbnail = output.get("thumbnail", {}).get("capture", 1)
+
+    # Build markdown content
+    lines = [
+        f"## name: {name}",
+        f"## resources_dir: {resources_dir}",
+    ]
+
+    # Add soundtrack if present
+    if soundtrack:
+        src = soundtrack.get("src", "")
+        if src.startswith("{{") and src.endswith("}}"):
+            # Extract filename from {{resources_dir/filename}}
+            filename = src[2:-2].split("/", 1)[1] if "/" in src[2:-2] else src[2:-2]
+            lines.append(f"## soundtrack: {filename}")
+
+        volume = soundtrack.get("volume")
+        if volume is not None:
+            lines.append(f"## soundtrack_volume: {volume}")
+
+    lines.append(f"## background: {background}")
+    lines.append("")
+
+    # Build table header
+    lines.extend(
+        [
+            "| # |             Text            |    Description     |     Clip     |     Timing      |Duration|Effect |Music effect|   Sound effect   |",
+            "|---|-----------------------------|--------------------|--------------|-----------------|--------|-------|------------|------------------|",
+        ]
+    )
+
+    # Extract clips from tracks
+    tracks = timeline.get("tracks", [])
+    video_clips = []
+    audio_clips = []
+
+    for track in tracks:
+        clips = track.get("clips", [])
+        for clip in clips:
+            asset = clip.get("asset", {})
+            if asset.get("type") == "audio":
+                audio_clips.append(clip)
+            else:
+                video_clips.append(clip)
+
+    # Match video clips with sound effects based on timing
+    row_num = 1
+    for i, clip in enumerate(video_clips):
+        asset = clip.get("asset", {})
+
+        # Extract clip info
+        src = asset.get("src", "")
+        if src.startswith("{{") and src.endswith("}}"):
+            filename = src[2:-2].split("/", 1)[1] if "/" in src[2:-2] else src[2:-2]
+        elif src.startswith("{") and src.endswith("}"):
+            filename = src[1:-1].split("/", 1)[1] if "/" in src[1:-1] else src[1:-1]
+        else:
+            filename = src
+
+        # Extract text overlay
+        overlay = asset.get("overlay", {})
+        text = overlay.get("text", "") if overlay else ""
+
+        # Generate description from filename or overlay
+        description = overlay.get("text", "") if overlay else filename
+
+        # Calculate timing
+        start = clip.get("start", 0)
+        length = clip.get("length", 0)
+
+        # Format timing as MM:SS:mmm-MM:SS:mmm
+        start_str = format_time_with_ms(start)
+        end_str = format_time_with_ms(start + length)
+        timing = f"{start_str}-{end_str}"
+
+        # Format duration
+        duration = format_duration(length)
+
+        # Extract effects
+        transition = clip.get("transition", {})
+        effect = ""
+        if transition.get("in") == "fadeFast" or transition.get("in") == "fade":
+            effect = "FadeIn"
+        elif transition.get("out") == "fadeFast" or transition.get("out") == "fade":
+            effect = "FadeOut"
+        elif clip.get("effect") == "zoomIn":
+            effect = "ZoomIn"
+        elif clip.get("effect") == "zoomOut":
+            effect = "ZoomOut"
+
+        # Find matching sound effect
+        sound_effect = ""
+        for audio_clip in audio_clips:
+            audio_start = audio_clip.get("start", 0)
+            if abs(audio_start - start) < 0.1:  # Match if start times are close
+                audio_src = audio_clip.get("asset", {}).get("src", "")
+                if audio_src.startswith("{{") and audio_src.endswith("}}"):
+                    sound_effect = (
+                        audio_src[2:-2].split("/", 1)[1]
+                        if "/" in audio_src[2:-2]
+                        else audio_src[2:-2]
+                    )
+                elif audio_src.startswith("{") and audio_src.endswith("}"):
+                    sound_effect = (
+                        audio_src[1:-1].split("/", 1)[1]
+                        if "/" in audio_src[1:-1]
+                        else audio_src[1:-1]
+                    )
+                break
+
+        # Debug output
+
+        # Build table row with proper spacing to match header
+        text_field = f"{text:<29}"
+        desc_field = f"{description:<20}"
+        clip_field = f"{filename:<14}"
+        timing_field = f"{timing:<17}"
+        dur_field = f"{duration:<8}"
+        effect_field = f"{effect:<7}"
+        music_field = f"{'':12}"
+        sound_field = f"{sound_effect:<17}"
+
+        row = f"| {row_num} |{text_field}|{desc_field}|{clip_field}|{timing_field}|{dur_field}|{effect_field}|{music_field}|{sound_field}|"
+        lines.append(row)
+        row_num += 1
+
+    lines.extend(
+        [
+            "",
+            f"## output_format: {output_format}",
+            f"## resolution: {resolution}",
+            f"## aspect_ratio: {aspect_ratio}",
+            f"## fps: {fps}",
+            f"## thumbnail_capture: {thumbnail}",
+        ]
+    )
+
+    # Write markdown file
+    output_path = json_path.with_suffix(".md")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+    print(f"Converted: {json_path} -> {output_path}")
+    return output_path
+
+
+def format_time_with_ms(seconds: float) -> str:
+    """Format time as MM:SS:mmm."""
+    minutes = int(seconds // 60)
+    secs = int(seconds % 60)
+    ms = int((seconds % 1) * 1000)
+    return f"{minutes:02d}:{secs:02d}:{ms:03d}"
+
+
+def format_duration(seconds: float) -> str:
+    """Format duration as X.Xs."""
+    return f"{seconds:.1f}s"
+
+
 def main():
     """Main entry point."""
     if len(sys.argv) < 2:
         print("Usage: python convert_script.py <input.md> [output.json]")
         print("       python convert_script.py script.md")
         print("       python convert_script.py script.md output.json")
+        print("       python convert_script.py --json-to-md <input.json>")
         sys.exit(1)
 
-    input_file = Path(sys.argv[1])
-    output_file = Path(sys.argv[2]) if len(sys.argv) > 2 else None
+    if sys.argv[1] == "--json-to-md":
+        if len(sys.argv) < 3:
+            print("Error: Missing input JSON file")
+            sys.exit(1)
 
-    try:
-        result = convert_file(input_file, output_file)
-        print(f"Success! Output: {result}")
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+        input_file = Path(sys.argv[2])
+        try:
+            result = json_to_md(input_file)
+            print(f"Success! Output: {result}")
+        except Exception as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+    else:
+        input_file = Path(sys.argv[1])
+        output_file = Path(sys.argv[2]) if len(sys.argv) > 2 else None
+
+        try:
+            result = convert_file(input_file, output_file)
+            print(f"Success! Output: {result}")
+        except Exception as e:
+            print(f"Error: {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -184,13 +184,27 @@ class ScriptChecker:
             self.add_result(f"{prefix}.asset.src", "ERROR", "Missing asset source")
 
         clip_type = asset.get("type")
-        if clip_type not in ("video", "image"):
+        if clip_type not in ("video", "image", "audio"):
             self.add_result(
                 f"{prefix}.asset.type",
                 "ERROR",
                 f"Invalid type: '{clip_type}'",
-                "Use 'video' or 'image'",
+                "Use 'video', 'image', or 'audio'",
             )
+
+        # Skip detailed checks for audio clips
+        if clip_type == "audio":
+            # Check audio-specific properties
+            if "volume" in asset:
+                volume = asset["volume"]
+                if not isinstance(volume, (int, float)) or volume < 0 or volume > 2:
+                    self.add_result(
+                        f"{prefix}.asset.volume",
+                        "WARNING",
+                        f"Invalid volume: {volume}",
+                        "Use 0.0-2.0 range",
+                    )
+            return
 
         # Check transitions
         transition = clip.get("transition")
@@ -233,6 +247,28 @@ class ScriptChecker:
                 f"Unknown filter: '{filter_name}'",
                 f"Valid: {', '.join(VALID_FILTERS)}",
             )
+
+        # Check for overlay (text)
+        asset = clip.get("asset", {})
+        overlay = asset.get("overlay")
+        if overlay:
+            overlay_type = overlay.get("type", "")
+            if overlay_type != "title":
+                self.add_result(
+                    f"{prefix}.asset.overlay.type",
+                    "WARNING",
+                    f"Unsupported overlay type: '{overlay_type}'",
+                    "Use 'title' for text overlays",
+                )
+
+            text = overlay.get("text", "")
+            if not text:
+                self.add_result(
+                    f"{prefix}.asset.overlay.text",
+                    "WARNING",
+                    "Overlay text is empty",
+                    "Add text content for the overlay",
+                )
 
         # Check length
         length = clip.get("length")
@@ -302,26 +338,35 @@ class ScriptChecker:
         if not tracks:
             return
 
-        clips = tracks[0].get("clips", [])
-        for i, clip in enumerate(clips):
-            asset = clip.get("asset", {})
-            src = asset.get("src", "")
+        # Check all tracks for resources
+        for track_idx, track in enumerate(tracks):
+            clips = track.get("clips", [])
+            for i, clip in enumerate(clips):
+                asset = clip.get("asset", {})
+                src = asset.get("src", "")
+                clip_type = asset.get("type", "")
 
-            # Extract resource name from template
-            if src.startswith("{{") and src.endswith("}}"):
-                resource = src[2:-2].split("/")[-1]
-            else:
-                resource = src.split("/")[-1]
+                # Extract resource name from template or direct path
+                if src.startswith("{{") and src.endswith("}}"):
+                    resource = src[2:-2].split("/")[-1]
+                elif src.startswith("{") and src.endswith("}"):
+                    resource = src[1:-1].split("/")[-1]
+                else:
+                    resource = src.split("/")[-1]
 
-            if resource:
-                resource_path = resources_path / resource
-                if not resource_path.exists():
-                    self.add_result(
-                        f"clip[{i}].resource",
-                        "WARNING",
-                        f"Resource not found: {resource}",
-                        f"Place {resource} in {resources_dir}/",
-                    )
+                if resource:
+                    resource_path = resources_path / resource
+                    if not resource_path.exists():
+                        clip_prefix = f"track{track_idx}.clip[{i}]"
+                        if clip_type == "audio":
+                            clip_prefix = f"audio.track{track_idx}.clip[{i}]"
+
+                        self.add_result(
+                            f"{clip_prefix}.resource",
+                            "WARNING",
+                            f"Resource not found: {resource}",
+                            f"Place {resource} in {resources_dir}/",
+                        )
 
     def run_checks(self) -> Tuple[bool, List[CheckResult]]:
         """Run all checks and return results."""
