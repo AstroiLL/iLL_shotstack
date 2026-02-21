@@ -1,16 +1,3 @@
-<!-- OPENSPEC:START -->
-# OpenSpec Instructions
-
-Always open `@/openspec/AGENTS.md` when the request:
-- Mentions planning/proposals (proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, or architecture shifts
-- Sounds ambiguous and you need the authoritative spec
-
-Use it to learn:
-- How to create and apply change proposals
-- Spec format and conventions
-- Project structure and guidelines
-<!-- OPENSPEC:END -->
 
 # AGENTS.md
 

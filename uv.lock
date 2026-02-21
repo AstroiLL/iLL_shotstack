@@ -280,7 +280,7 @@ wheels = [
 ]
 
 [[package]]
-name = "shortstack"
+name = "shotstack"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

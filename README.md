@@ -32,8 +32,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ### 2. Клонирование репозитория
 
 ```bash
-git clone https://github.com/AstroiLL/iLL_shortstack.git
-cd iLL_shortstack
+git clone https://github.com/AstroiLL/iLL_shotstack.git
+cd iLL_shotstack
 ```
 
 ### 3. Установка зависимостей

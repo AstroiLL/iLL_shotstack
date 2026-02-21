@@ -1,5 +1,5 @@
 def main():
-    print("Hello from shortstack!")
+    print("Hello from shotstack!")
 
 
 if __name__ == "__main__":
