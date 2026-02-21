@@ -124,6 +124,240 @@
           "clips": [
             {
               "asset": {
+                "type": "text",
+                "text": "Тратишь 3 часа на рилс",
+                "width": 800,
+                "height": 120,
+                "font": {
+                  "family": "Impact",
+                  "size": 32,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 0.0,
+              "length": 1.8,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Ты уже проиграл",
+                "width": 800,
+                "height": 120,
+                "font": {
+                  "family": "Impact",
+                  "size": 32,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 1.8,
+              "length": 1.2,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Монтаж до 2 ночи",
+                "width": 800,
+                "height": 120,
+                "font": {
+                  "family": "Impact",
+                  "size": 32,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 3.0,
+              "length": 1.5,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Пост раз в неделю",
+                "width": 800,
+                "height": 120,
+                "font": {
+                  "family": "Impact",
+                  "size": 32,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 4.5,
+              "length": 1.6,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "А другие постят каждый день",
+                "width": 800,
+                "height": 120,
+                "font": {
+                  "family": "Impact",
+                  "size": 32,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 6.1,
+              "length": 2.2,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Эксперты подключают",
+                "width": 800,
+                "height": 120,
+                "font": {
+                  "family": "Impact",
+                  "size": 32,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 8.3,
+              "length": 1.6,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Контент завод",
+                "width": 800,
+                "height": 120,
+                "font": {
+                  "family": "Impact",
+                  "size": 32,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 9.9,
+              "length": 1.0,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Результат 20 видео за вечер",
+                "width": 800,
+                "height": 120,
+                "font": {
+                  "family": "Impact",
+                  "size": 32,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 10.9,
+              "length": 2.5,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Заявок стало в 4 раза больше",
+                "width": 800,
+                "height": 120,
+                "font": {
+                  "family": "Impact",
+                  "size": 32,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 13.4,
+              "length": 3.0,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Ты как и дальше вручную",
+                "width": 800,
+                "height": 120,
+                "font": {
+                  "family": "Impact",
+                  "size": 32,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 16.4,
+              "length": 2.1,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            }
+          ]
+        },
+        {
+          "clips": [
+            {
+              "asset": {
                 "type": "audio",
                 "src": "{{Content/click.wav}}",
                 "volume": 0.7

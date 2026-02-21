@@ -21,6 +21,33 @@
               }
             }
           ]
+        },
+        {
+          "clips": [
+            {
+              "asset": {
+                "type": "text",
+                "text": "Test",
+                "width": 800,
+                "height": 120,
+                "font": {
+                  "family": "Impact",
+                  "size": 32,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 0.0,
+              "length": 3.0,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            }
+          ]
         }
       ],
       "background": "#000000"

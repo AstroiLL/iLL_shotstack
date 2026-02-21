@@ -345,7 +345,11 @@ class VideoAssembler:
                         # Validate clip structure
                         if "asset" not in clip:
                             errors.append(f"Track {i}, clip {j}: missing 'asset'")
-                        elif "src" not in clip["asset"]:
+                        elif (
+                            clip["asset"].get("type") != "text"
+                            and "src" not in clip["asset"]
+                        ):
+                            # Text clips don't need src, only video/image/audio clips do
                             errors.append(f"Track {i}, clip {j}: missing 'asset.src'")
 
                 if total_clips == 0:

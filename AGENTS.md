@@ -3,7 +3,7 @@
 
 Guidelines for AI coding agents working in this repository.
 
-Use MCP Context7 for documentations
+For research documentation always use MCP Context7
 
 ## Build, Lint, and Test Commands
 
@@ -83,6 +83,54 @@ filter: boost, greyscale, contrast, muted, negative, darken, lighten
 
 ### Aspect Ratios
 aspect_ratio: 9:16, 16:9, 1:1, 4:5, 4:3
+
+## Text Overlays
+
+Text overlays are automatically generated from the "Text" column in the markdown table.
+
+### Global Text Settings
+- **Font**: Impact
+- **Size**: 32px
+- **Color**: White (#FFFFFF)
+- **Position**: Center of screen
+- **Transitions**: fadeFast in/out
+
+### Text Track Structure
+Text overlays are placed on a separate track in the timeline:
+```json
+{
+  "tracks": [
+    {"clips": video_clips},
+    {"clips": text_clips},
+    {"clips": sound_effects}
+  ]
+}
+```
+
+### Text Asset Format
+```json
+{
+  "asset": {
+    "type": "text",
+    "text": "Your text here",
+    "font": {
+      "family": "Impact",
+      "size": 32,
+      "color": "#FFFFFF"
+    },
+    "alignment": {
+      "horizontal": "center",
+      "vertical": "center"
+    }
+  },
+  "start": 0.0,
+  "length": 1.8,
+  "transition": {
+    "in": "fadeFast",
+    "out": "fadeFast"
+  }
+}
+```
 
 ## Code Style Guidelines
 

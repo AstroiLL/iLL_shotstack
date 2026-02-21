@@ -118,7 +118,8 @@ class ScriptChecker:
         if self.data is None:
             return
 
-        required = ["name", "timeline", "output"]
+        # Support both flat structure and template-wrapped structure
+        required = ["name"]
         for field in required:
             if field not in self.data:
                 self.add_result(
@@ -128,12 +129,39 @@ class ScriptChecker:
                     f"Add '{field}' to your script",
                 )
 
+        # Check for timeline and output (can be flat or in template)
+        has_timeline = "timeline" in self.data or (
+            "template" in self.data and "timeline" in self.data.get("template", {})
+        )
+        has_output = "output" in self.data or (
+            "template" in self.data and "output" in self.data.get("template", {})
+        )
+
+        if not has_timeline:
+            self.add_result(
+                "timeline",
+                "ERROR",
+                "Missing required field: 'timeline'",
+                "Add 'timeline' to your script or inside 'template'",
+            )
+
+        if not has_output:
+            self.add_result(
+                "output",
+                "ERROR",
+                "Missing required field: 'output'",
+                "Add 'output' to your script or inside 'template'",
+            )
+
     def check_timeline(self):
         """Check timeline structure."""
         if self.data is None:
             return
 
-        timeline = self.data.get("timeline")
+        # Support both flat structure and template-wrapped structure
+        timeline = self.data.get("timeline") or self.data.get("template", {}).get(
+            "timeline"
+        )
         if not timeline:
             return
 
@@ -179,20 +207,22 @@ class ScriptChecker:
             self.add_result(f"{prefix}.asset", "ERROR", "Missing asset")
             return
 
-        src = asset.get("src")
-        if not src:
-            self.add_result(f"{prefix}.asset.src", "ERROR", "Missing asset source")
+        # Text clips don't require src field
+        if asset.get("type") != "text":
+            src = asset.get("src")
+            if not src:
+                self.add_result(f"{prefix}.asset.src", "ERROR", "Missing asset source")
 
         clip_type = asset.get("type")
-        if clip_type not in ("video", "image", "audio"):
+        if clip_type not in ("video", "image", "audio", "text"):
             self.add_result(
                 f"{prefix}.asset.type",
                 "ERROR",
                 f"Invalid type: '{clip_type}'",
-                "Use 'video', 'image', or 'audio'",
+                "Use 'video', 'image', 'audio', or 'text'",
             )
 
-        # Skip detailed checks for audio clips
+        # Skip detailed checks for audio and text clips
         if clip_type == "audio":
             # Check audio-specific properties
             if "volume" in asset:
@@ -204,6 +234,16 @@ class ScriptChecker:
                         f"Invalid volume: {volume}",
                         "Use 0.0-2.0 range",
                     )
+            return
+
+        # Text clips don't have src, they have text field
+        if clip_type == "text":
+            if "text" not in asset:
+                self.add_result(
+                    f"{prefix}.asset.text",
+                    "ERROR",
+                    "Missing text content for text clip",
+                )
             return
 
         # Check transitions
@@ -282,7 +322,8 @@ class ScriptChecker:
         if self.data is None:
             return
 
-        output = self.data.get("output")
+        # Support both flat structure and template-wrapped structure
+        output = self.data.get("output") or self.data.get("template", {}).get("output")
         if not output:
             return
 
@@ -333,7 +374,10 @@ class ScriptChecker:
             )
             return
 
-        timeline = self.data.get("timeline", {})
+        # Support both flat structure and template-wrapped structure
+        timeline = self.data.get("timeline") or self.data.get("template", {}).get(
+            "timeline", {}
+        )
         tracks = timeline.get("tracks", [])
         if not tracks:
             return
@@ -345,6 +389,10 @@ class ScriptChecker:
                 asset = clip.get("asset", {})
                 src = asset.get("src", "")
                 clip_type = asset.get("type", "")
+
+                # Skip text clips - they don't have src
+                if clip_type == "text":
+                    continue
 
                 # Extract resource name from template or direct path
                 if src.startswith("{{") and src.endswith("}}"):

@@ -1,2 +1,2 @@
-uv run check_script.py -v $*
+uv run check_json.py -v $*
 

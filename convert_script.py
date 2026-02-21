@@ -60,10 +60,13 @@ def parse_duration(duration_str: str) -> float:
     return float(duration_str)
 
 
-def parse_new_table(content: str, resources_dir: str) -> tuple[List[dict], List[dict]]:
+def parse_new_table(
+    content: str, resources_dir: str
+) -> tuple[list[dict], list[dict], list[dict]]:
     """Parse new table format with text, descriptions, and sound effects."""
-    clips = []
-    sound_effects = []
+    clips: list[dict] = []
+    sound_effects: list[dict] = []
+    text_clips: list[dict] = []
     lines = content.split("\n")
     in_table = False
     start_time = 0.0
@@ -107,6 +110,16 @@ def parse_new_table(content: str, resources_dir: str) -> tuple[List[dict], List[
                     )
                     clips.append(clip)
 
+                    # Build text clip if text is not empty
+                    if text and text.strip():
+                        duration = parse_duration(duration_str)
+                        text_clip = build_text_clip(
+                            text.strip(),
+                            start_time,
+                            duration,
+                        )
+                        text_clips.append(text_clip)
+
                     # Build sound effect clip if specified
                     if sound_effect and sound_effect != "":
                         sound_clip = build_sound_effect_clip(
@@ -126,7 +139,7 @@ def parse_new_table(content: str, resources_dir: str) -> tuple[List[dict], List[
                     print(f"Warning: Skipping invalid row: {line} ({e})")
                     continue
 
-    return clips, sound_effects
+    return clips, sound_effects, text_clips
 
 
 def build_output_config(
@@ -171,6 +184,31 @@ def build_output_config(
     # Shotstack API requires additional scale parameter for thumbnail
 
     return output
+
+
+def build_text_clip(
+    text: str,
+    start_time: float,
+    duration: float,
+) -> Dict[str, Any]:
+    """Build text clip with global settings (Impact font, white, shadow, center)."""
+    return {
+        "asset": {
+            "type": "text",
+            "text": text,
+            "width": 800,
+            "height": 120,
+            "font": {
+                "family": "Impact",
+                "size": 32,
+                "color": "#FFFFFF",
+            },
+            "alignment": {"horizontal": "center", "vertical": "center"},
+        },
+        "start": start_time,
+        "length": duration,
+        "transition": {"in": "fadeFast", "out": "fadeFast"},
+    }
 
 
 def build_clip_with_text(
@@ -322,7 +360,7 @@ def md_to_shotstack(md_path: Path) -> dict:
             soundtrack["volume"] = float(soundtrack_vol_match.group(1).strip())
 
     # Parse table with new format: Text, Description, Clip, Timing, Duration, Effect, Music effect, Sound effect
-    clips, sound_effects = parse_new_table(content, resources_dir)
+    clips, sound_effects, text_clips = parse_new_table(content, resources_dir)
 
     # Build timeline with multiple tracks
     tracks = []
@@ -330,6 +368,10 @@ def md_to_shotstack(md_path: Path) -> dict:
     # Main video track
     if clips:
         tracks.append({"clips": clips})
+
+    # Text overlay track
+    if text_clips:
+        tracks.append({"clips": text_clips})
 
     # Sound effects track
     if sound_effects:
@@ -544,6 +586,7 @@ def json_to_md(json_path: Path) -> Path:
     tracks = timeline.get("tracks", [])
     video_clips = []
     audio_clips = []
+    text_clips = []
 
     for track in tracks:
         clips = track.get("clips", [])
@@ -553,6 +596,8 @@ def json_to_md(json_path: Path) -> Path:
             asset_type = asset.get("type", "video")
             if asset_type == "audio":
                 audio_clips.append(clip)
+            elif asset_type == "text":
+                text_clips.append(clip)
             else:
                 video_clips.append(clip)
 
@@ -576,16 +621,21 @@ def json_to_md(json_path: Path) -> Path:
         else:
             video_filename = src
 
-        # Extract text overlay
-        overlay = asset.get("overlay", {})
-        text = overlay.get("text", "") if overlay else ""
-
-        # Generate description from filename or overlay
-        description = overlay.get("text", "") if overlay else video_filename
-
         # Calculate timing
         start = clip.get("start", 0)
         length = clip.get("length", 0)
+
+        # Extract text from text clips matching by timing
+        text = ""
+        for text_clip in text_clips:
+            text_start = text_clip.get("start", 0)
+            # Match if text clip starts within 0.1s of video clip
+            if abs(start - text_start) < 0.1:
+                text = text_clip.get("asset", {}).get("text", "")
+                break
+
+        # Generate description from text or filename
+        description = text if text else video_filename
 
         # Format timing as MM:SS:mmm-MM:SS:mmm
         start_str = format_time_with_ms(start)
