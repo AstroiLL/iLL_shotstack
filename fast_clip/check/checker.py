@@ -90,10 +90,22 @@ class ScriptChecker:
 
     def check_resources_exist(self):
         """Check if resources directory and files exist."""
-        if not self.data or "resources_dir" not in self.data:
+        if not self.data:
             return
 
-        resources_dir = self.script_dir / self.data["resources_dir"]
+        # Handle template-based structure
+        if "template" in self.data:
+            template_data = self.data.get("template", {})
+            # Get resources_dir from template or from top level
+            resources_dir_name = template_data.get(
+                "resourcesDir", self.data.get("resources_dir", ".")
+            )
+        elif "resources_dir" in self.data:
+            resources_dir_name = self.data["resources_dir"]
+        else:
+            return
+
+        resources_dir = self.script_dir / resources_dir_name
         if not resources_dir.exists():
             self.add_result(
                 "Resources Directory",
@@ -114,29 +126,64 @@ class ScriptChecker:
             self.add_result("Resources Directory", "OK", f"Found: {resources_dir}")
 
         # Check individual video files
-        if "timeline" in self.data and isinstance(self.data["timeline"], list):
-            for i, item in enumerate(self.data["timeline"]):
-                if isinstance(item, dict) and "resource" in item:
-                    resource = item["resource"]
-                    resource_path = resources_dir / resource
-                    if not resource_path.exists():
-                        self.add_result(
-                            f"Timeline[{i}].resource",
-                            "ERROR",
-                            f"Video file not found: {resource}",
-                            f"Add file to '{self.data['resources_dir']}' or update filename",
-                        )
-                    elif not resource_path.is_file():
-                        self.add_result(
-                            f"Timeline[{i}].resource",
-                            "ERROR",
-                            f"Not a file: {resource}",
-                            "Update resource to point to a valid file",
-                        )
-                    else:
-                        self.add_result(
-                            f"Timeline[{i}].resource", "OK", f"Found: {resource}"
-                        )
+        # Handle template structure
+        if "template" in self.data:
+            template_data = self.data.get("template", {})
+            timeline = template_data.get("timeline", {})
+            tracks = timeline.get("tracks", [])
+
+            track_count = 0
+            for track in tracks:
+                clips = track.get("clips", [])
+                for j, clip in enumerate(clips):
+                    asset = clip.get("asset", {})
+                    if asset.get("type") in ["video", "image"]:
+                        src = asset.get("src", "")
+                        # Extract filename from {{placeholder}} format
+                        if src.startswith("{{") and src.endswith("}}"):
+                            placeholder = src[2:-2]  # Remove {{ and }}
+                            if "/" in placeholder:
+                                filename = placeholder.split("/")[-1]
+                                resource_path = resources_dir / filename
+                                if not resource_path.exists():
+                                    self.add_result(
+                                        f"Track[{track_count}].Clip[{j}].resource",
+                                        "WARNING",  # Changed to WARNING since these might be in merge
+                                        f"File not found: {filename}",
+                                        "Add file to resources directory or ensure it's in merge data",
+                                    )
+                                else:
+                                    self.add_result(
+                                        f"Track[{track_count}].Clip[{j}].resource",
+                                        "OK",
+                                        f"Found: {filename}",
+                                    )
+                track_count += 1
+        else:
+            # Legacy structure
+            if "timeline" in self.data and isinstance(self.data["timeline"], list):
+                for i, item in enumerate(self.data["timeline"]):
+                    if isinstance(item, dict) and "resource" in item:
+                        resource = item["resource"]
+                        resource_path = resources_dir / resource
+                        if not resource_path.exists():
+                            self.add_result(
+                                f"Timeline[{i}].resource",
+                                "ERROR",
+                                f"Video file not found: {resource}",
+                                f"Add file to '{resources_dir_name}' or update filename",
+                            )
+                        elif not resource_path.is_file():
+                            self.add_result(
+                                f"Timeline[{i}].resource",
+                                "ERROR",
+                                f"Not a file: {resource}",
+                                "Update resource to point to a valid file",
+                            )
+                        else:
+                            self.add_result(
+                                f"Timeline[{i}].resource", "OK", f"Found: {resource}"
+                            )
 
     def check_all(self) -> bool:
         """Run all checks. Return True if no errors."""
@@ -157,7 +204,7 @@ class ScriptChecker:
             print("-" * 60)
 
         # Validate script configuration
-        validation_errors = validate_script_config(self.data)
+        validation_errors = validate_script_config(self.data or {})
         for status, message, suggestion in validation_errors:
             # Extract field name from message
             if ":" in message:

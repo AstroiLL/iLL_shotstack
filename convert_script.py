@@ -363,17 +363,18 @@ def md_to_shotstack(md_path: Path) -> dict:
     clips, sound_effects, text_clips = parse_new_table(content, resources_dir)
 
     # Build timeline with multiple tracks
+    # IMPORTANT: Order matters! First track is TOP layer (text over video)
     tracks = []
 
-    # Main video track
-    if clips:
-        tracks.append({"clips": clips})
-
-    # Text overlay track
+    # Text overlay track (TOP layer - must be first)
     if text_clips:
         tracks.append({"clips": text_clips})
 
-    # Sound effects track
+    # Main video track (BOTTOM layer - must be after text)
+    if clips:
+        tracks.append({"clips": clips})
+
+    # Sound effects track (audio layer, order doesn't matter for audio)
     if sound_effects:
         tracks.append({"clips": sound_effects})
 

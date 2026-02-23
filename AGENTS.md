@@ -3,7 +3,8 @@
 
 Guidelines for AI coding agents working in this repository.
 
-For research documentation always use MCP Context7
+Для работы с документацией всегда используй MCP Context7
+Писать все комментарии и диалоги на русском языке
 
 ## Build, Lint, and Test Commands
 
@@ -100,12 +101,17 @@ Text overlays are placed on a separate track in the timeline:
 ```json
 {
   "tracks": [
-    {"clips": video_clips},
     {"clips": text_clips},
+    {"clips": video_clips},
     {"clips": sound_effects}
   ]
 }
 ```
+
+**IMPORTANT**: Track order determines layering! First track is TOP layer (text over video).
+- Track 0: Text overlays (top layer, visible over video)
+- Track 1: Video clips (bottom layer)
+- Track 2: Audio/Sound effects (audio layer)
 
 ### Text Asset Format
 ```json
@@ -244,6 +250,38 @@ def check_transition(trans: str) -> Tuple[str, str, Optional[str]]:
         return ("WARNING", f"Unknown transition: '{trans}'",
                 f"Use: {', '.join(sorted(VALID_TRANSITIONS))}")
     return ("OK", f"Transition: '{trans}'", None)
+```
+
+## Template + Merge Validation
+
+The `check.py` validator now includes comprehensive validation for template + merge workflow:
+
+### Validated Items
+- **Placeholder syntax**: Validates `{{field}}` pattern (double braces required)
+- **Merge array presence**: Ensures merge array exists when template has placeholders
+- **Merge entry structure**: Validates each entry has required `find` and `replace` fields
+- **Placeholder matching**: Verifies all placeholders have corresponding merge entries
+- **Invalid syntax detection**: Warns on single braces `{field}`, mismatched braces, empty placeholders
+
+### Example Valid Structure
+```json
+{
+  "template": {
+    "timeline": {
+      "tracks": [{
+        "clips": [{
+          "asset": {
+            "type": "video",
+            "src": "{{Content/video.mp4}}"
+          }
+        }]
+      }]
+    }
+  },
+  "merge": [
+    {"find": "Content/video.mp4", "replace": ""}
+  ]
+}
 ```
 
 ## Notes

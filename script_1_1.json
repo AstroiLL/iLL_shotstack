@@ -1,6 +1,6 @@
 {
   "name": "Content",
-  "resources_dir": "Content",
+  "resourcesDir": "Content",
   "template": {
     "timeline": {
       "tracks": [

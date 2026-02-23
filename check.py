@@ -2,11 +2,15 @@
 """Fast-Clip Script Checker: Validate Shotstack-compatible JSON scripts."""
 
 import json
+import re
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass
 
+
+# Regex pattern for placeholder detection
+PLACEHOLDER_PATTERN = re.compile(r"\{\{([^}]+)\}\}")
 
 # Valid Shotstack values
 VALID_TRANSITIONS = {
@@ -87,6 +91,58 @@ class ScriptChecker:
             self.has_errors = True
         elif status == "WARNING":
             self.has_warnings = True
+
+    def find_placeholders_in_template(self, obj: Any, path: str = "") -> Dict[str, str]:
+        """Recursively scan template for placeholders and return {placeholder: path} mapping."""
+        placeholders = {}
+
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                current_path = f"{path}.{key}" if path else key
+                if isinstance(value, str):
+                    matches = PLACEHOLDER_PATTERN.findall(value)
+                    for match in matches:
+                        placeholder = f"{{{{{match}}}}}"
+                        placeholders[placeholder] = f"template.{current_path}"
+                elif isinstance(value, (dict, list)):
+                    placeholders.update(
+                        self.find_placeholders_in_template(value, current_path)
+                    )
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                current_path = f"{path}[{i}]"
+                if isinstance(item, str):
+                    matches = PLACEHOLDER_PATTERN.findall(item)
+                    for match in matches:
+                        placeholder = f"{{{{{match}}}}}"
+                        placeholders[placeholder] = f"template.{current_path}"
+                elif isinstance(item, (dict, list)):
+                    placeholders.update(
+                        self.find_placeholders_in_template(item, current_path)
+                    )
+
+        return placeholders
+
+    def extract_unique_placeholders(self, obj: Any) -> Set[str]:
+        """Extract all unique placeholder names from template values."""
+        placeholders = set()
+
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if isinstance(value, str):
+                    matches = PLACEHOLDER_PATTERN.findall(value)
+                    placeholders.update(matches)
+                elif isinstance(value, (dict, list)):
+                    placeholders.update(self.extract_unique_placeholders(value))
+        elif isinstance(obj, list):
+            for item in obj:
+                if isinstance(item, str):
+                    matches = PLACEHOLDER_PATTERN.findall(item)
+                    placeholders.update(matches)
+                elif isinstance(item, (dict, list)):
+                    placeholders.update(self.extract_unique_placeholders(item))
+
+        return placeholders
 
     def load_script(self) -> bool:
         """Load and parse JSON script."""
@@ -416,6 +472,227 @@ class ScriptChecker:
                             f"Place {resource} in {resources_dir}/",
                         )
 
+    def check_invalid_placeholder_syntax(self, obj: Any, path: str = ""):
+        """Check for invalid placeholder syntax and report warnings."""
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                current_path = f"{path}.{key}" if path else key
+                if isinstance(value, str):
+                    self._check_string_for_invalid_placeholders(
+                        value, f"template.{current_path}"
+                    )
+                elif isinstance(value, (dict, list)):
+                    self.check_invalid_placeholder_syntax(value, current_path)
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                current_path = f"{path}[{i}]"
+                if isinstance(item, str):
+                    self._check_string_for_invalid_placeholders(
+                        item, f"template.{current_path}"
+                    )
+                elif isinstance(item, (dict, list)):
+                    self.check_invalid_placeholder_syntax(item, current_path)
+
+    def _check_string_for_invalid_placeholders(self, value: str, path: str):
+        """Check a string value for invalid placeholder syntax."""
+        import re
+
+        # Pattern for valid placeholders (already captured by main regex)
+        valid_pattern = r"\{\{([^}]+)\}\}"
+
+        # Pattern for single braces: {field}
+        single_brace_pattern = r"(?<!\{)\{([^{}]+)\}(?!\})"
+
+        # Pattern for mismatched opening: {{field} or {{field (no closing)
+        mismatched_open_pattern = r"\{\{([^{}]*)\}(?!\})"
+
+        # Pattern for mismatched closing: {field}}
+        mismatched_close_pattern = r"(?<!\{)\{([^{}]*)\}\}"
+
+        # Check for single braces (not part of valid {{ }})
+        for match in re.finditer(single_brace_pattern, value):
+            self.add_result(
+                path,
+                "WARNING",
+                f"Invalid placeholder syntax: '{{{match.group(1)}}}' - use double braces '{{{{{match.group(1)}}}}}'",
+                "Valid placeholder format is {{field}}",
+            )
+
+        # Check for mismatched braces - opening (with single closing brace)
+        for match in re.finditer(mismatched_open_pattern, value):
+            inner = match.group(1)
+            if inner:
+                self.add_result(
+                    path,
+                    "WARNING",
+                    f"Mismatched braces: '{{{{{inner}}}' - missing closing brace",
+                    "Use matching braces: {{field}}",
+                )
+
+        # Check for cases like {{field without any closing
+        if "{{" in value:
+            # Remove valid placeholders first
+            temp = re.sub(valid_pattern, "", value)
+            # Check for remaining {{ patterns
+            for match in re.finditer(r"\{\{([^{}]*)$", temp):
+                inner = match.group(1)
+                self.add_result(
+                    path,
+                    "WARNING",
+                    f"Mismatched braces: '{{{{{inner}' - missing closing braces",
+                    "Use matching braces: {{field}}",
+                )
+            # Check for {{text}} where text contains invalid characters
+            for match in re.finditer(r"\{\{([^{}]*)\}\}", temp):
+                inner = match.group(1)
+                if inner and inner.strip():
+                    # This is actually valid, but let's check if it was removed above
+                    pass
+
+        # Check for mismatched braces - closing
+        for match in re.finditer(mismatched_close_pattern, value):
+            inner = match.group(1)
+            if inner:
+                self.add_result(
+                    path,
+                    "WARNING",
+                    f"Mismatched braces: '{{{inner}}}' - missing opening brace",
+                    "Use matching braces: {{field}}",
+                )
+
+        # Check for empty placeholders {{}}
+        if "{{}}" in value:
+            self.add_result(
+                path,
+                "WARNING",
+                "Empty placeholder: '{{}}' - provide a field name",
+                "Use format: {{field_name}}",
+            )
+
+    def check_template_structure(self):
+        """Check that template field structure is valid."""
+        if self.data is None:
+            return
+
+        template = self.data.get("template")
+        if template is None:
+            return
+
+        # Validate template is an object (dict)
+        if not isinstance(template, dict):
+            self.add_result(
+                "template",
+                "ERROR",
+                "Template field must be an object",
+                "Use a JSON object for the template field",
+            )
+            return
+
+        # Check for placeholders in template
+        placeholders = self.find_placeholders_in_template(template)
+        if placeholders:
+            self.log(f"Found {len(placeholders)} placeholder(s) in template")
+            for placeholder, path in placeholders.items():
+                self.log(f"  {placeholder} at {path}")
+
+        # Check for invalid placeholder syntax
+        self.check_invalid_placeholder_syntax(template)
+
+    def check_merge_array(self):
+        """Check that merge array is valid and matches placeholders."""
+        if self.data is None:
+            return
+
+        template = self.data.get("template")
+        if template is None or not isinstance(template, dict):
+            return
+
+        # Extract placeholders from template
+        placeholder_names = self.extract_unique_placeholders(template)
+
+        if not placeholder_names:
+            # No placeholders found, no need for merge array
+            return
+
+        # Check for merge array
+        merge = self.data.get("merge")
+        if merge is None:
+            self.add_result(
+                "merge",
+                "ERROR",
+                f"Template has {len(placeholder_names)} placeholder(s) but no merge array",
+                "Add a 'merge' array to provide replacement values for placeholders",
+            )
+            return
+
+        if not isinstance(merge, list):
+            self.add_result(
+                "merge", "ERROR", "Merge field must be an array", "Use a JSON array"
+            )
+            return
+
+        if len(merge) == 0:
+            self.add_result(
+                "merge",
+                "ERROR",
+                f"Merge array is empty but template has {len(placeholder_names)} placeholder(s)",
+                "Add merge entries for each placeholder",
+            )
+            return
+
+        # Validate each merge entry and build set of find values
+        merge_find_values = set()
+        for i, entry in enumerate(merge):
+            if not isinstance(entry, dict):
+                self.add_result(
+                    f"merge[{i}]",
+                    "ERROR",
+                    f"Merge entry {i} must be an object",
+                    "Each merge entry should be a JSON object",
+                )
+                continue
+
+            # Check required fields
+            if "find" not in entry:
+                self.add_result(
+                    f"merge[{i}].find",
+                    "ERROR",
+                    f"Merge entry {i} missing required 'find' field",
+                    "Add 'find' field with the placeholder name (without braces)",
+                )
+            else:
+                find_value = entry.get("find")
+                merge_find_values.add(find_value)
+                if find_value == "":
+                    self.add_result(
+                        f"merge[{i}].find",
+                        "WARNING",
+                        f"Merge entry {i} has empty 'find' value",
+                        "Provide a placeholder name",
+                    )
+
+            if "replace" not in entry:
+                self.add_result(
+                    f"merge[{i}].replace",
+                    "ERROR",
+                    f"Merge entry {i} missing required 'replace' field",
+                    "Add 'replace' field with the replacement value",
+                )
+
+        # Check that all placeholders have corresponding merge entries
+        for placeholder_name in placeholder_names:
+            if placeholder_name not in merge_find_values:
+                # Find where this placeholder is used
+                placeholder = f"{{{{{placeholder_name}}}}}"
+                paths = self.find_placeholders_in_template(template)
+                path = paths.get(placeholder, "unknown location")
+                self.add_result(
+                    "merge.missing",
+                    "ERROR",
+                    f"Placeholder '{placeholder_name}' at {path} has no matching merge entry",
+                    f"Add a merge entry with find: '{placeholder_name}'",
+                )
+
     def run_checks(self) -> Tuple[bool, List[CheckResult]]:
         """Run all checks and return results."""
         if not self.load_script():
@@ -425,6 +702,8 @@ class ScriptChecker:
         self.check_timeline()
         self.check_output()
         self.check_resources()
+        self.check_template_structure()
+        self.check_merge_array()
 
         return not self.has_errors, self.results
 

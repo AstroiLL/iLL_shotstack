@@ -233,17 +233,52 @@ def validate_script_config(
     """
     errors = []
 
-    # Check required fields
-    required = ["name", "resources_dir", "timeline", "result_file"]
-    for field in required:
-        if field not in data:
+    # Check for template-based structure or legacy structure
+    if "template" in data:
+        # Template-based structure validation
+        template = data.get("template", {})
+
+        # Check required fields in template
+        if "timeline" not in template:
             errors.append(
                 (
                     "ERROR",
-                    f"Required field '{field}' is missing",
-                    f"Add '{field}' to script",
+                    "Required field 'template.timeline' is missing",
+                    "Add 'timeline' to template",
                 )
             )
+
+        # Check for output in template
+        if "output" not in template:
+            errors.append(
+                (
+                    "WARNING",
+                    "Field 'template.output' is missing",
+                    "Add 'output' to template for better control",
+                )
+            )
+
+        # Check merge array
+        if "merge" not in data:
+            errors.append(
+                (
+                    "WARNING",
+                    "Field 'merge' is missing",
+                    "Add 'merge' array for template substitutions",
+                )
+            )
+    else:
+        # Legacy structure validation
+        required = ["name", "resources_dir", "timeline", "result_file"]
+        for field in required:
+            if field not in data:
+                errors.append(
+                    (
+                        "ERROR",
+                        f"Required field '{field}' is missing",
+                        f"Add '{field}' to script",
+                    )
+                )
 
     # Check name
     if "name" in data:
