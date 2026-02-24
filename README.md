@@ -70,6 +70,12 @@ cp .env.example .env
 # Конвертировать MD в JSON (автоопределение формата)
 uv run python convert_script.py script.md
 
+# Конвертация с подробным выводом
+uv run python convert_script.py -v script.md
+
+# Конвертация без вывода (только код возврата)
+uv run python convert_script.py -q script.md
+
 # Собрать видео из скрипта
 ./build.sh script.json
 
@@ -84,11 +90,39 @@ uv run python convert_script.py script.md
 
 ```bash
 # Конвертация (автоопределение направления)
-uv run python convert_script.py script.md        # MD -> JSON
-uv run python convert_script.py script.json      # JSON -> MD
+uv run python convert_script.py script.md              # MD -> JSON (normal mode)
+uv run python convert_script.py -v script.md           # MD -> JSON (verbose mode)
+uv run python convert_script.py -q script.md           # MD -> JSON (quiet mode)
+uv run python convert_script.py script.json            # JSON -> MD
+
+# Валидация скрипта
+uv run python check.py script.json              # Проверка
+uv run python check.py -v script.json           # Проверка с деталями
+uv run python check.py -q script.json           # Проверка без вывода (только код возврата)
 
 # Сборка видео
 uv run python assemble.py script.json -v
+```
+
+### Режимы вывода
+
+Инструменты поддерживают три режима вывода:
+
+- **Normal** (по умолчанию): показывает только основную информацию (имя проекта, ресурсы, количество клипов)
+- **Verbose** (`-v`, `--verbose`): детальный построчный вывод всех операций (парсинг, создание клипов, merge поля)
+- **Quiet** (`-q`, `--quiet`): полное отключение вывода, только код возврата (0 = успех, 1 = ошибка)
+
+Режим quiet полезен для автоматизации и скриптов:
+
+```bash
+# Проверка в скрипте
+if uv run python check.py -q script.json; then
+    echo "Скрипт валиден, запускаем сборку..."
+    ./build.sh script.json
+else
+    echo "Ошибка валидации!"
+    exit 1
+fi
 ```
 
 ## Формат скрипта
@@ -244,7 +278,14 @@ uv run python convert_script.py script.json
 Перед сборкой проверьте скрипт на ошибки:
 
 ```bash
-uv run python check.py script.json -v
+# Обычная проверка (показывает ошибки и предупреждения)
+uv run python check.py script.json
+
+# Проверка с подробным выводом (показывает все детали валидации)
+uv run python check.py -v script.json
+
+# Проверка без вывода (только код возврата 0/1)
+uv run python check.py -q script.json
 ```
 
 ## Примеры

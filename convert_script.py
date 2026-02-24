@@ -8,6 +8,22 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 
+# Global verbosity level: -1=quiet, 0=normal, 1=verbose
+VERBOSITY = 0
+
+
+def log_verbose(message: str):
+    """Print message if verbose mode is enabled."""
+    if VERBOSITY >= 1:
+        print(message)
+
+
+def log_normal(message: str):
+    """Print message if not in quiet mode."""
+    if VERBOSITY >= 0:
+        print(message)
+
+
 # Valid Shotstack values
 VALID_TRANSITIONS = {
     "fade",
@@ -70,6 +86,9 @@ def parse_new_table(
     lines = content.split("\n")
     in_table = False
     start_time = 0.0
+    row_num = 0
+
+    log_verbose(f"Parsing table from markdown content ({len(lines)} lines)")
 
     for line in lines:
         line = line.strip()
@@ -81,6 +100,7 @@ def parse_new_table(
         if in_table and line.startswith("|") and not line.startswith("|---"):
             cells = [cell.strip() for cell in line.split("|")[1:-1]]
             if len(cells) >= 8:
+                row_num += 1
                 try:
                     # cells: [#, Text, Description, Clip, Timing, Duration, Effect, Music effect, Sound effect]
                     text = cells[1]
@@ -96,7 +116,12 @@ def parse_new_table(
                         cells[8].lower() if len(cells) > 8 and cells[8] else None
                     )
 
+                    log_verbose(
+                        f"  Row {row_num}: clip={clip_file}, timing={timing_str}, duration={duration_str}, effect={effect or 'none'}"
+                    )
+
                     # Build main video clip with text overlay
+                    log_verbose(f"    Building video clip: {clip_file}")
                     clip = build_clip_with_text(
                         clip_file,
                         timing_str,
@@ -109,19 +134,27 @@ def parse_new_table(
                         sound_effects,
                     )
                     clips.append(clip)
+                    log_verbose(
+                        f"    Video clip added: start={start_time}s, type={clip['asset']['type']}"
+                    )
 
                     # Build text clip if text is not empty
                     if text and text.strip():
                         duration = parse_duration(duration_str)
+                        log_verbose(
+                            f"    Building text overlay: '{text[:30]}...' at {start_time}s"
+                        )
                         text_clip = build_text_clip(
                             text.strip(),
                             start_time,
                             duration,
                         )
                         text_clips.append(text_clip)
+                        log_verbose(f"    Text overlay added: length={duration}s")
 
                     # Build sound effect clip if specified
                     if sound_effect and sound_effect != "":
+                        log_verbose(f"    Building sound effect: {sound_effect}")
                         sound_clip = build_sound_effect_clip(
                             sound_effect,
                             timing_str,
@@ -130,6 +163,9 @@ def parse_new_table(
                             start_time,
                         )
                         sound_effects.append(sound_clip)
+                        log_verbose(
+                            f"    Sound effect added: volume={sound_clip['asset'].get('volume', 1.0)}"
+                        )
 
                     # Update start time for next clip
                     duration = parse_duration(duration_str)
@@ -314,21 +350,39 @@ def parse_timing_start(timing_str: str) -> Optional[float]:
 
 
 def parse_time(time_str: str) -> float:
-    """Parse time string to seconds."""
+    """Parse time string to seconds.
+
+    Supports formats:
+    - MM:SS (minutes:seconds)
+    - HH:MM:SS (hours:minutes:seconds)
+    - MM:SS:mmm (minutes:seconds:milliseconds)
+    """
     time_str = time_str.strip()
     parts = time_str.split(":")
     if len(parts) == 2:  # MM:SS
         minutes, seconds = map(int, parts)
         return minutes * 60 + seconds
-    elif len(parts) == 3:  # HH:MM:SS
-        hours, minutes, seconds = map(int, parts)
-        return hours * 3600 + minutes * 60 + seconds
+    elif len(parts) == 3:
+        # Could be HH:MM:SS or MM:SS:mmm
+        # Check if third part looks like milliseconds (3 digits, < 1000)
+        third = int(parts[2])
+        if third < 1000 and len(parts[2]) <= 3:
+            # MM:SS:mmm format
+            minutes, seconds, ms = int(parts[0]), int(parts[1]), third
+            return minutes * 60 + seconds + ms / 1000
+        else:
+            # HH:MM:SS format
+            hours, minutes, seconds = int(parts[0]), int(parts[1]), third
+            return hours * 3600 + minutes * 60 + seconds
     else:
-        raise ValueError(f"Invalid time format: {time_str}. Use MM:SS or HH:MM:SS")
+        raise ValueError(
+            f"Invalid time format: {time_str}. Use MM:SS, HH:MM:SS, or MM:SS:mmm"
+        )
 
 
 def md_to_shotstack(md_path: Path) -> dict:
     """Convert markdown script to native Shotstack JSON."""
+    log_verbose(f"Reading markdown file: {md_path}")
     content = md_path.read_text(encoding="utf-8")
 
     # Parse headers
@@ -348,6 +402,7 @@ def md_to_shotstack(md_path: Path) -> dict:
 
     name = name_match.group(1).strip()
     resources_dir = resources_match.group(1).strip()
+    log_verbose(f"Parsed headers: name='{name}', resources_dir='{resources_dir}'")
 
     # Parse soundtrack
     soundtrack: Optional[dict] = None
@@ -360,7 +415,11 @@ def md_to_shotstack(md_path: Path) -> dict:
             soundtrack["volume"] = float(soundtrack_vol_match.group(1).strip())
 
     # Parse table with new format: Text, Description, Clip, Timing, Duration, Effect, Music effect, Sound effect
+    log_verbose("Parsing table rows...")
     clips, sound_effects, text_clips = parse_new_table(content, resources_dir)
+    log_verbose(
+        f"Parsed {len(clips)} video clips, {len(text_clips)} text overlays, {len(sound_effects)} sound effects"
+    )
 
     # Build timeline with multiple tracks
     # IMPORTANT: Order matters! First track is TOP layer (text over video)
@@ -390,6 +449,7 @@ def md_to_shotstack(md_path: Path) -> dict:
     )
 
     # Generate merge fields for all assets - simple approach
+    log_verbose("Generating merge fields...")
     merge_fields = []
 
     # Add video clips to merge
@@ -399,6 +459,7 @@ def md_to_shotstack(md_path: Path) -> dict:
             # Extract template variable from {{Content/filename}}
             template_var = src[2:-2]  # Remove {{}}
             merge_fields.append({"find": template_var, "replace": ""})
+            log_verbose(f"  Merge field added: {template_var}")
 
     # Add sound effects to merge
     for audio in sound_effects:
@@ -406,6 +467,9 @@ def md_to_shotstack(md_path: Path) -> dict:
         if src.startswith("{{") and src.endswith("}}"):
             template_var = src[2:-2]
             merge_fields.append({"find": template_var, "replace": ""})
+            log_verbose(f"  Merge field added: {template_var} (audio)")
+
+    log_verbose(f"Total merge fields: {len(merge_fields)}")
 
     return {
         "name": name,
@@ -500,23 +564,25 @@ def convert_file(input_path: Path, output_path: Optional[Path] = None) -> Path:
         json.dumps(shotstack_data, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
-    print(f"Converted: {input_path} -> {output_path}")
-    print(f"Name: {shotstack_data.get('name', 'Unknown')}")
-    print(f"Resources: {shotstack_data.get('resourcesDir', 'Unknown')}")
+    log_normal(f"Converted: {input_path} -> {output_path}")
+    log_normal(f"Name: {shotstack_data.get('name', 'Unknown')}")
+    log_normal(f"Resources: {shotstack_data.get('resourcesDir', 'Unknown')}")
 
     # Count video clips (not audio)
     video_clips_count = 0
     timeline = shotstack_data.get("timeline", {})
+    if not timeline:
+        timeline = shotstack_data.get("template", {}).get("timeline", {})
     tracks = timeline.get("tracks", [])
     for track in tracks:
         clips = track.get("clips", [])
         for clip in clips:
             asset = clip.get("asset", {})
-            if asset.get("type") != "audio":
+            if asset.get("type") not in ("audio", "text"):
                 video_clips_count += 1
                 break
 
-    print(f"Clips: {video_clips_count}")
+    log_normal(f"Clips: {video_clips_count}")
 
     return output_path
 
@@ -730,7 +796,7 @@ def json_to_md(json_path: Path) -> Path:
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-    print(f"Converted: {json_path} -> {output_path}")
+    log_normal(f"Converted: {json_path} -> {output_path}")
     return output_path
 
 
@@ -749,32 +815,57 @@ def format_duration(seconds: float) -> str:
 
 def main():
     """Main entry point."""
-    if len(sys.argv) < 2:
-        print("Usage: python convert_script.py <input> [output]")
-        print("       python convert_script.py script.md")
-        print("       python convert_script.py script.json")
-        print("       python convert_script.py script.md output.json")
+    global VERBOSITY
+
+    args = sys.argv[1:]
+
+    # Parse flags
+    verbose = "-v" in args or "--verbose" in args
+    quiet = "-q" in args or "--quiet" in args
+
+    # Remove flags from args
+    args = [a for a in args if a not in ("-v", "--verbose", "-q", "--quiet")]
+
+    # Set verbosity level
+    if quiet:
+        VERBOSITY = -1
+    elif verbose:
+        VERBOSITY = 1
+    else:
+        VERBOSITY = 0
+
+    if len(args) < 1:
+        log_normal("Usage: python convert_script.py [options] <input> [output]")
+        log_normal("")
+        log_normal("Options:")
+        log_normal("  -v, --verbose    Show detailed output")
+        log_normal("  -q, --quiet      Suppress all output (exit code only)")
+        log_normal("")
+        log_normal("Examples:")
+        log_normal("  python convert_script.py script.md")
+        log_normal("  python convert_script.py -v script.md")
+        log_normal("  python convert_script.py -q script.md output.json")
         sys.exit(1)
 
-    input_file = Path(sys.argv[1])
-    output_file = Path(sys.argv[2]) if len(sys.argv) > 2 else None
+    input_file = Path(args[0])
+    output_file = Path(args[1]) if len(args) > 1 else None
 
     try:
         # Auto-detect format based on file extension
         if input_file.suffix == ".md":
             # Convert MD to JSON
             result = convert_file(input_file, output_file)
-            print(f"Success! Output: {result}")
+            log_normal(f"Success! Output: {result}")
         elif input_file.suffix == ".json":
             # Convert JSON to MD
             result = json_to_md(input_file)
-            print(f"Success! Output: {result}")
+            log_normal(f"Success! Output: {result}")
         else:
-            print(f"Error: Unsupported file format '{input_file.suffix}'")
-            print("Supported formats: .md, .json")
+            log_normal(f"Error: Unsupported file format '{input_file.suffix}'")
+            log_normal("Supported formats: .md, .json")
             sys.exit(1)
     except Exception as e:
-        print(f"Error: {e}")
+        log_normal(f"Error: {e}")
         sys.exit(1)
 
 

@@ -68,9 +68,10 @@ class CheckResult:
 class ScriptChecker:
     """Checker for Fast-Clip JSON scripts."""
 
-    def __init__(self, script_path: Path, verbose: bool = False):
+    def __init__(self, script_path: Path, verbose: bool = False, quiet: bool = False):
         self.script_path = Path(script_path)
         self.verbose = verbose
+        self.quiet = quiet
         self.script_dir = self.script_path.parent
         self.data: Optional[dict] = None
         self.results: List[CheckResult] = []
@@ -78,8 +79,8 @@ class ScriptChecker:
         self.has_warnings = False
 
     def log(self, message: str):
-        """Print message if verbose mode is enabled."""
-        if self.verbose:
+        """Print message if verbose mode is enabled and not quiet."""
+        if self.verbose and not self.quiet:
             print(message)
 
     def add_result(
@@ -709,6 +710,10 @@ class ScriptChecker:
 
     def print_report(self):
         """Print formatted check report."""
+        # Skip all output if quiet mode is enabled
+        if self.quiet:
+            return
+
         print(f"\n{'=' * 60}")
         print(f"Script: {self.script_path}")
         print(f"{'=' * 60}")
@@ -750,10 +755,10 @@ class ScriptChecker:
 
 
 def check_script(
-    script_path: Path, verbose: bool = False
+    script_path: Path, verbose: bool = False, quiet: bool = False
 ) -> Tuple[bool, List[CheckResult]]:
     """Check a script file."""
-    checker = ScriptChecker(script_path, verbose)
+    checker = ScriptChecker(script_path, verbose, quiet)
     is_valid, results = checker.run_checks()
     checker.print_report()
     return is_valid, results
@@ -766,21 +771,37 @@ def main():
     if not args or args[0] in ("-h", "--help"):
         print("Fast-Clip Script Checker")
         print("")
-        print("Usage: python check.py <script.json> [options]")
+        print("Usage: python check.py [options] <script.json>")
         print("")
         print("Options:")
         print("  -v, --verbose    Show detailed output")
+        print("  -q, --quiet      Suppress all output (exit code only)")
         print("  -h, --help       Show this help")
         print("")
         print("Examples:")
         print("  python check.py script.json")
-        print("  python check.py script.json -v")
+        print("  python check.py -v script.json")
+        print("  python check.py -q script.json")
         sys.exit(0)
 
-    script_path = Path(args[0])
+    # Parse flags
     verbose = "-v" in args or "--verbose" in args
+    quiet = "-q" in args or "--quiet" in args
 
-    is_valid, _ = check_script(script_path, verbose)
+    # Remove flags from args to get script path
+    args = [a for a in args if a not in ("-v", "--verbose", "-q", "--quiet")]
+
+    if not args:
+        print("Error: No script file specified")
+        sys.exit(1)
+
+    script_path = Path(args[0])
+
+    # Quiet mode overrides verbose
+    if quiet:
+        verbose = False
+
+    is_valid, _ = check_script(script_path, verbose, quiet)
     sys.exit(0 if is_valid else 1)
 
 

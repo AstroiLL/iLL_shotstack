@@ -66,6 +66,11 @@ Markdown Script → convert_script.py → Shotstack Template JSON → assemble.p
 2. Восстановление таблицы с текстовыми оверлеями
 3. Сопоставление аудио треков с видео по timing
 
+**Режимы вывода:**
+- **Normal** (по умолчанию): только результат (имя, ресурсы, количество клипов)
+- **Verbose** (`-v`, `--verbose`): построчный вывод парсинга и генерации
+- **Quiet** (`-q`, `--quiet`): без вывода, только код возврата
+
 **Особенности:**
 - **Автоопределение направления**: по расширению файла (.md → .json, .json → .md)
 - **Индексация**: при существовании выходного файла добавляется индекс (script_1.json, script_2.json)
@@ -162,6 +167,11 @@ Markdown Script → convert_script.py → Shotstack Template JSON → assemble.p
 
 **Назначение:** Валидация Shotstack Template JSON скриптов перед обработкой.
 
+**Режимы вывода:**
+- **Normal** (по умолчанию): показывает ошибки и предупреждения с итоговым статусом
+- **Verbose** (`-v`, `--verbose`): дополнительно показывает найденные placeholders и все OK проверки
+- **Quiet** (`-q`, `--quiet`): полное отключение вывода, только код возврата (0/1)
+
 **Проверки:**
 - Валидность JSON
 - Наличие template и merge полей
@@ -170,6 +180,8 @@ Markdown Script → convert_script.py → Shotstack Template JSON → assemble.p
 - Корректность aspect_ratio, format, fps
 - Валидность длительности клипов
 - Корректность аудио клипов (type, src, volume)
+- Синтаксис placeholders ({{field}})
+- Соответствие placeholders и merge массива
 
 **Поддерживаемые значения:**
 - Transitions: fade, fadeFast, slideLeft, slideRight, zoom и др.
@@ -353,11 +365,18 @@ uv run ruff check --fix .
 # Форматирование
 uv run ruff format .
 
-# Конвертация MD в JSON
-uv run python convert_script.py script.md
+# Конвертация MD в JSON (различные режимы)
+uv run python convert_script.py script.md              # Обычный режим
+uv run python convert_script.py -v script.md           # Подробный вывод
+uv run python convert_script.py -q script.md           # Без вывода (только код возврата)
 
-# Валидация
-uv run python check.py script.json -v
+# Конвертация JSON в MD
+uv run python convert_script.py script.json
+
+# Валидация (различные режимы)
+uv run python check.py script.json              # Обычная проверка
+uv run python check.py -v script.json           # Подробная проверка
+uv run python check.py -q script.json           # Без вывода (только код возврата)
 
 # Сборка видео
 uv run python assemble.py script.json -v
@@ -389,11 +408,19 @@ VALID_TRANSITIONS = {"fade", "fadeFast", "newEffect"}
 
 ## Отладка
 
-### Включение verbose режима
+### Режимы вывода для отладки
 
+**Verbose режим** (подробный вывод):
 ```bash
-uv run python assemble.py script.json -v
-uv run python check.py script.json -v
+uv run python convert_script.py -v script.md      # Показывает парсинг, клипы, merge поля
+uv run python check.py -v script.json             # Показывает все проверки и placeholders
+uv run python assemble.py -v script.json          # Показывает процесс сборки
+```
+
+**Quiet режим** (без вывода, для автоматизации):
+```bash
+uv run python convert_script.py -q script.md && echo "Успех" || echo "Ошибка"
+uv run python check.py -q script.json && ./build.sh script.json
 ```
 
 ### Логирование HTTP запросов

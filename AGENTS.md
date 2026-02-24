@@ -13,13 +13,16 @@ Guidelines for AI coding agents working in this repository.
 uv sync
 
 # Convert between formats (auto-detection by file extension)
-uv run python convert_script.py script.md         # MD -> JSON
-uv run python convert_script.py script.json       # JSON -> MD
-uv run python convert_script.py script.md out.json  # Custom output
+uv run python convert_script.py script.md              # MD -> JSON (normal mode)
+uv run python convert_script.py -v script.md           # MD -> JSON (verbose mode)
+uv run python convert_script.py -q script.md           # MD -> JSON (quiet mode, no output)
+uv run python convert_script.py script.json            # JSON -> MD
+uv run python convert_script.py script.md out.json     # Custom output
 
 # Validate Shotstack template JSON
 uv run python check.py script.json              # Validate script
 uv run python check.py -v script.json           # Verbose validation
+uv run python check.py -q script.json           # Quiet validation (exit code only)
 
 # Assemble video (needs SHOTSTACK_API_KEY in .env)
 uv run python assemble.py script.json           # Assemble video

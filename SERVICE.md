@@ -54,6 +54,35 @@ boost, greyscale, contrast, muted, negative, darken, lighten
 - `done` - готово
 - `failed` - ошибка
 
+## Инструменты командной строки
+
+### convert_script.py
+
+Конвертер между форматами MD и Shotstack JSON.
+
+**Режимы вывода:**
+- `convert_script.py script.md` - обычный режим (только результат)
+- `convert_script.py -v script.md` - подробный вывод (парсинг, клипы, merge поля)
+- `convert_script.py -q script.md` - без вывода (только код возврата)
+
+### check.py
+
+Валидатор Shotstack JSON скриптов.
+
+**Режимы вывода:**
+- `check.py script.json` - обычная проверка (ошибки и предупреждения)
+- `check.py -v script.json` - подробная проверка (все детали валидации)
+- `check.py -q script.json` - тихий режим (только код возврата 0/1)
+
+### assemble.py
+
+Сборка видео через Shotstack API.
+
+**Параметры:**
+- `assemble.py script.json` - сборка с базовым выводом
+- `assemble.py -v script.json` - подробный вывод процесса
+- `assemble.py -o ./output script.json` - указать папку для сохранения
+
 ## Получение API ключа
 
 1. Зарегистрируйтесь на https://shotstack.io/
