@@ -55,7 +55,7 @@ def validate_timeline_item(
     Returns:
         List of (status, message, suggestion) tuples
     """
-    errors = []
+    errors: List[Tuple[str, str, Optional[str]]] = []
 
     # Check required fields
     required = ["id", "resource", "time_start", "time_end"]
@@ -231,7 +231,7 @@ def validate_script_config(
     Returns:
         List of (status, message, suggestion) tuples
     """
-    errors = []
+    errors: List[Tuple[str, str, Optional[str]]] = []
 
     # Check for template-based structure or legacy structure
     if "template" in data:

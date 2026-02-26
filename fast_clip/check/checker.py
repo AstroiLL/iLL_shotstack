@@ -96,12 +96,12 @@ class ScriptChecker:
         # Handle template-based structure
         if "template" in self.data:
             template_data = self.data.get("template", {})
-            # Get resources_dir from template or from top level
+            # Get resourcesDir from template or from top level (camelCase)
             resources_dir_name = template_data.get(
-                "resourcesDir", self.data.get("resources_dir", ".")
+                "resourcesDir", self.data.get("resourcesDir", ".")
             )
-        elif "resources_dir" in self.data:
-            resources_dir_name = self.data["resources_dir"]
+        elif "resourcesDir" in self.data:
+            resources_dir_name = self.data["resourcesDir"]
         else:
             return
 

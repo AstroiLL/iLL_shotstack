@@ -1,0 +1,30 @@
+{
+  "template": {
+    "timeline": {
+      "tracks": [
+        {
+          "clips": [
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{video.mp4}}"
+              },
+              "start": 0.0,
+              "length": 5.0,
+              "effect": "invalidEffect"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "output": {
+    "format": "mp4"
+  },
+  "merge": [
+    {
+      "find": "video.mp4",
+      "replace": ""
+    }
+  ]
+}

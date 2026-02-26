@@ -7,6 +7,13 @@ import sys
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+from fast_clip.check.validation import (
+    JsonValidator,
+    FileChecker,
+    FieldValidator,
+    ValidationLevel,
+)
+
 
 # Global verbosity level: -1=quiet, 0=normal, 1=verbose
 VERBOSITY = 0
@@ -232,11 +239,11 @@ def build_text_clip(
         "asset": {
             "type": "text",
             "text": text,
-            "width": 800,
-            "height": 120,
+            "width": 400,
+            "height": 300,
             "font": {
-                "family": "Impact",
-                "size": 32,
+                "family": "Roboto",
+                "size": 48,
                 "color": "#FFFFFF",
             },
             "alignment": {"horizontal": "center", "vertical": "center"},
@@ -408,7 +415,7 @@ def md_to_shotstack(md_path: Path) -> dict:
     soundtrack: Optional[dict] = None
     if soundtrack_match:
         soundtrack = {
-            "src": f"{{{resources_dir}/{soundtrack_match.group(1).strip()}}}",
+            "src": f"{{{{{resources_dir}/{soundtrack_match.group(1).strip()}}}}}",
             "effect": "fadeIn",
         }
         if soundtrack_vol_match:
@@ -469,6 +476,14 @@ def md_to_shotstack(md_path: Path) -> dict:
             merge_fields.append({"find": template_var, "replace": ""})
             log_verbose(f"  Merge field added: {template_var} (audio)")
 
+    # Add soundtrack to merge
+    if soundtrack:
+        src = soundtrack["src"]
+        if src.startswith("{{") and src.endswith("}}"):
+            template_var = src[2:-2]
+            merge_fields.append({"find": template_var, "replace": ""})
+            log_verbose(f"  Merge field added: {template_var} (soundtrack)")
+
     log_verbose(f"Total merge fields: {len(merge_fields)}")
 
     return {
@@ -476,8 +491,8 @@ def md_to_shotstack(md_path: Path) -> dict:
         "resourcesDir": resources_dir,  # Add resourcesDir to main level
         "template": {
             "timeline": timeline,
-            "output": output,
         },
+        "output": output,
         "merge": merge_fields,
     }
 
@@ -533,7 +548,12 @@ def build_clip(cells: List[str], resources_dir: str) -> dict:
     return clip
 
 
-def convert_file(input_path: Path, output_path: Optional[Path] = None) -> Path:
+def convert_file(
+    input_path: Path,
+    output_path: Optional[Path] = None,
+    validate_output: bool = False,
+    strict_mode: bool = False,
+) -> Optional[Path]:
     """Convert MD file to Shotstack JSON."""
     input_path = Path(input_path)
 
@@ -559,6 +579,50 @@ def convert_file(input_path: Path, output_path: Optional[Path] = None) -> Path:
         parent = original_output_path.parent
         output_path = parent / f"{stem}_{counter}{suffix}"
         counter += 1
+
+    # Validate the generated JSON before saving
+    if validate_output:
+        log_verbose("Validating generated JSON...")
+
+        # Initialize validators
+        json_validator = JsonValidator(strict_mode=strict_mode)
+        file_checker = FileChecker(strict_mode=strict_mode, script_path=input_path)
+        field_validator = FieldValidator(strict_mode=strict_mode)
+
+        # Run validation
+        json_report = json_validator.validate(shotstack_data)
+        file_report = file_checker.validate(shotstack_data)
+        field_report = field_validator.validate(shotstack_data)
+
+        # Combine results and check for errors
+        all_results = []
+        total_errors = 0
+        total_warnings = 0
+
+        for report in [json_report, file_report, field_report]:
+            total_errors += report.total_errors
+            total_warnings += report.total_warnings
+            all_results.extend(report.results)
+
+        if total_errors > 0:
+            log_normal("❌ Validation FAILED - errors found:")
+            for result in all_results:
+                if result.level == ValidationLevel.ERROR:
+                    log_normal(f"  ✗ {result.field or 'unknown'}: {result.message}")
+                    if result.suggestion:
+                        log_normal(f"    → {result.suggestion}")
+            log_normal("Fix errors before saving file.")
+            return None  # Return None to indicate failure
+
+        if total_warnings > 0:
+            log_normal("⚠️  Validation passed with warnings:")
+            for result in all_results:
+                if result.level == ValidationLevel.WARNING:
+                    log_verbose(f"  ! {result.field or 'unknown'}: {result.message}")
+                    if result.suggestion:
+                        log_verbose(f"    → {result.suggestion}")
+
+        log_verbose("✓ Validation passed")
 
     output_path.write_text(
         json.dumps(shotstack_data, indent=2, ensure_ascii=False),
@@ -822,9 +886,15 @@ def main():
     # Parse flags
     verbose = "-v" in args or "--verbose" in args
     quiet = "-q" in args or "--quiet" in args
+    validate_output = "--validate" in args
+    strict_mode = "--strict" in args
 
     # Remove flags from args
-    args = [a for a in args if a not in ("-v", "--verbose", "-q", "--quiet")]
+    args = [
+        a
+        for a in args
+        if a not in ("-v", "--verbose", "-q", "--quiet", "--validate", "--strict")
+    ]
 
     # Set verbosity level
     if quiet:
@@ -840,11 +910,15 @@ def main():
         log_normal("Options:")
         log_normal("  -v, --verbose    Show detailed output")
         log_normal("  -q, --quiet      Suppress all output (exit code only)")
+        log_normal("  --validate        Validate generated JSON before saving")
+        log_normal("  --strict         Enable strict validation mode")
         log_normal("")
         log_normal("Examples:")
         log_normal("  python convert_script.py script.md")
         log_normal("  python convert_script.py -v script.md")
         log_normal("  python convert_script.py -q script.md output.json")
+        log_normal("  python convert_script.py --validate script.md")
+        log_normal("  python convert_script.py --strict --validate script.md")
         sys.exit(1)
 
     input_file = Path(args[0])
@@ -854,8 +928,12 @@ def main():
         # Auto-detect format based on file extension
         if input_file.suffix == ".md":
             # Convert MD to JSON
-            result = convert_file(input_file, output_file)
-            log_normal(f"Success! Output: {result}")
+            result = convert_file(input_file, output_file, validate_output, strict_mode)
+            if result:
+                log_normal(f"Success! Output: {result}")
+            else:
+                log_normal("Conversion failed due to validation errors.")
+                sys.exit(1)
         elif input_file.suffix == ".json":
             # Convert JSON to MD
             result = json_to_md(input_file)

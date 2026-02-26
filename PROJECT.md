@@ -59,10 +59,11 @@ Markdown Script → convert_script.py → Shotstack Template JSON → assemble.p
 1. Парсинг заголовков (name, resources_dir, soundtrack и др.)
 2. Парсинг таблицы с колонками: Text, Description, Clip, Timing, Duration, Effect, Music effect, Sound effect
 3. Генерация структуры Shotstack Template JSON с `{{resources_dir/file}}` placeholders
-4. Создание merge массива для замены placeholders на URL
+4. Вынос `output` на верхний уровень для совместимости с валидатором
+5. Создание merge массива для замены placeholders на URL
 
 **Процесс конвертации JSON → MD:**
-1. Извлечение данных из template.timeline и template.output
+1. Извлечение данных из `template.timeline` и корневого `output`
 2. Восстановление таблицы с текстовыми оверлеями
 3. Сопоставление аудио треков с видео по timing
 
@@ -78,16 +79,7 @@ Markdown Script → convert_script.py → Shotstack Template JSON → assemble.p
 - **Фильтры**: boost, greyscale, contrast, muted, negative, darken, lighten
 
 ### 2. Uploader (`fast_clip/uploader.py`)
-
-**Назначение:** Загрузка локальных видео-файлов в Shotstack через Ingest API.
-
-**Основные методы:**
-- `upload(file_path)` - загрузка одного файла с ожиданием обработки
-- `_get_signed_url()` - получение signed URL для загрузки
-- `_wait_for_file_ready()` - polling статуса обработки (до 60 сек)
-
-**Важно:** Shotstack требует время для обработки загруженных файлов. Метод `_wait_for_file_ready()` делает polling API каждые 2 секунды до получения статуса "ready".
-
+...
 ### 3. Timeline Builder (`fast_clip/timeline_builder.py`)
 
 **Назначение:** Замена `{{placeholder}}` на реальные URL загруженных файлов через merge workflow.
@@ -99,15 +91,17 @@ Markdown Script → convert_script.py → Shotstack Template JSON → assemble.p
 - Удаление служебных полей (`name`, `resourcesDir`) перед отправкой
 
 **Workflow:**
-1. Получение template JSON с `{{placeholders}}`
+1. Получение JSON с `template`, `output` и `merge`
 2. Загрузка файлов через Ingest API
 3. Создание merge массива: `[{"find": "Video_01/clip.mp4", "replace": "https://..."}]`
-4. Отправка на рендеринг с template + merge
+4. Отправка на рендеринг с заполненным merge или прямой подстановкой в timeline
 
 **Пример:**
 ```json
 // Template вход:
 {
+  "name": "project_name",
+  "resourcesDir": "Video_01",
   "template": {
     "timeline": {
       "tracks": [{
@@ -117,13 +111,68 @@ Markdown Script → convert_script.py → Shotstack Template JSON → assemble.p
       }]
     }
   },
+  "output": {"format": "mp4"},
   "merge": [{"find": "Video_01/clip.mp4", "replace": ""}]
 }
+```
+...
+### 5. Assembler (`fast_clip/assembler.py`)
 
-// После обработки merge:
+**Назначение:** Главный оркестратор, объединяющий все компоненты с поддержкой template + merge workflow.
+
+**Процесс сборки:**
+1. Загрузка Shotstack Template JSON скрипта
+2. Проверка формата (наличие `template` и `merge`)
+3. Извлечение ресурсов из `template.timeline` (включая `soundtrack` и `tracks`)
+4. Сбор уникальных файлов из `merge` массива и плейсхолдеров
+5. Загрузка всех файлов (видео + аудио) через Uploader
+6. Создание `merge` данных с реальными URL
+7. Подготовка данных для рендеринга (подстановка URL в timeline и копирование `output` из корня)
+8. Отправка на рендеринг через ShotstackClient
+9. Ожидание завершения (polling)
+10. Скачивание результата
+...
+### Shotstack-native JSON Format
+
+```json
 {
-  "id": "template-id",
-  "merge": [{"find": "Video_01/clip.mp4", "replace": "https://shotstack.io/..."}]
+  "name": "project_name",
+  "resourcesDir": "Video_01",
+  "template": {
+    "timeline": {
+      "soundtrack": {
+        "src": "{{Video_01/music.mp3}}",
+        "effect": "fadeIn",
+        "volume": 0.5
+      },
+      "background": "#000000",
+      "tracks": [{
+        "clips": [{
+          "asset": {
+            "type": "video",
+            "src": "{{Video_01/clip.mp4}}",
+            "trim": 0,
+            "volume": 1.0
+          },
+          "start": 0.0,
+          "length": 5.0,
+          "transition": {"in": "fadeFast", "out": "slideLeft"},
+          "effect": "zoomIn",
+          "filter": "boost"
+        }]
+      }]
+    }
+  },
+  "output": {
+    "format": "mp4",
+    "resolution": "hd",
+    "aspectRatio": "9:16",
+    "fps": 30
+  },
+  "merge": [
+    {"find": "Video_01/clip.mp4", "replace": ""},
+    {"find": "Video_01/music.mp3", "replace": ""}
+  ]
 }
 ```
 

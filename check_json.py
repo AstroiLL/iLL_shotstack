@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Fast-Clip Script Checker - Interactive CLI wrapper."""
+"""Fast-Clip Script Checker - Interactive CLI wrapper.
+
+DEPRECATED: This script is deprecated and will be removed in a future release.
+Please migrate to the new 'check.py' script for the latest validation features.
+
+Run 'python migrate_validation.py' for migration information.
+"""
 
 import sys
 from pathlib import Path
@@ -12,6 +18,11 @@ from fast_clip.check import check_script
 
 def main():
     """Main entry point."""
+    print("⚠️  WARNING: check_json.py is deprecated", file=sys.stderr)
+    print("Please migrate to the new 'check.py' script", file=sys.stderr)
+    print("Run 'python migrate_validation.py' for information", file=sys.stderr)
+    print()
+
     verbose = False
     script_path = None
 

@@ -1,0 +1,35 @@
+{
+  "template": {
+    "timeline": {
+      "tracks": [
+        {
+          "clips": [
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{video.mp4}}"
+              },
+              "start": 0.0,
+              "length": 5.0,
+              "transition": {
+                "in": "fade",
+                "out": "slideLeft"
+              },
+              "effect": "zoomIn"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "output": {
+    "format": "mp4",
+    "aspectRatio": "16:9"
+  },
+  "merge": [
+    {
+      "find": "video.mp4",
+      "replace": ""
+    }
+  ]
+}

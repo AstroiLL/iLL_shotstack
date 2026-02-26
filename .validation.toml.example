@@ -1,0 +1,22 @@
+# Validation Configuration for Fast-Clip
+# Copy this file to .validation.toml and adjust settings as needed
+
+[validation]
+# Enable strict mode (warnings become errors)
+strict_mode = false
+
+# Maximum number of parallel workers for file validation
+# Defaults to min(8, cpu_count * 2)
+# max_workers = 8
+
+# Minimum number of files to trigger parallel validation
+# parallel_threshold = 5
+
+# Skip file accessibility checks
+skip_file_validation = false
+
+# Enable caching of validation results
+enable_cache = true
+
+# Enable verbose output
+verbose = false

@@ -67,4 +67,8 @@ class TimelineBuilder:
             if "resourcesDir" in resolved:
                 resolved.pop("resourcesDir", None)
 
+            # Ensure output is included from original script
+            if "output" in self.script:
+                resolved["output"] = self.script["output"]
+
         return resolved

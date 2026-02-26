@@ -1,0 +1,490 @@
+{
+  "name": "Content",
+  "resourcesDir": "Content",
+  "template": {
+    "timeline": {
+      "tracks": [
+        {
+          "clips": [
+            {
+              "asset": {
+                "type": "text",
+                "text": "Тратишь 3 часа на один рилс",
+                "width": 400,
+                "height": 300,
+                "font": {
+                  "family": "Roboto",
+                  "size": 48,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 0.0,
+              "length": 1.8,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Ты уже проиграл",
+                "width": 400,
+                "height": 300,
+                "font": {
+                  "family": "Roboto",
+                  "size": 48,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 1.8,
+              "length": 1.2,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Монтаж до 2 ночи",
+                "width": 400,
+                "height": 300,
+                "font": {
+                  "family": "Roboto",
+                  "size": 48,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 3.0,
+              "length": 1.5,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Пост раз в неделю",
+                "width": 400,
+                "height": 300,
+                "font": {
+                  "family": "Roboto",
+                  "size": 48,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 4.5,
+              "length": 1.6,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "А другие постят каждый день",
+                "width": 400,
+                "height": 300,
+                "font": {
+                  "family": "Roboto",
+                  "size": 48,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 6.1,
+              "length": 2.2,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Эксперты подключают контент завод",
+                "width": 400,
+                "height": 300,
+                "font": {
+                  "family": "Roboto",
+                  "size": 48,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 8.3,
+              "length": 2.0,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Результат 20 видео за вечер",
+                "width": 400,
+                "height": 300,
+                "font": {
+                  "family": "Roboto",
+                  "size": 48,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 10.9,
+              "length": 2.3,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Заявок стало в 4 раза больше",
+                "width": 400,
+                "height": 300,
+                "font": {
+                  "family": "Roboto",
+                  "size": 48,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 13.2,
+              "length": 3.2,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            },
+            {
+              "asset": {
+                "type": "text",
+                "text": "Ты как и дальше вручную",
+                "width": 400,
+                "height": 300,
+                "font": {
+                  "family": "Roboto",
+                  "size": 48,
+                  "color": "#FFFFFF"
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              },
+              "start": 16.4,
+              "length": 2.1,
+              "transition": {
+                "in": "fadeFast",
+                "out": "fadeFast"
+              }
+            }
+          ]
+        },
+        {
+          "clips": [
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{Content/1-Avatar.mov}}",
+                "trim": 0.0
+              },
+              "start": 0.0,
+              "length": 1.8,
+              "fit": "cover",
+              "effect": "zoomIn",
+              "transition": {
+                "in": "zoom"
+              }
+            },
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{Content/1-Avatar.mov}}",
+                "trim": 1.8
+              },
+              "start": 1.8,
+              "length": 1.2,
+              "fit": "cover"
+            },
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{Content/2-Ustal.mp4}}",
+                "trim": 3.0
+              },
+              "start": 3.0,
+              "length": 1.5,
+              "fit": "cover"
+            },
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{Content/3-Girl.mp4}}",
+                "trim": 4.5
+              },
+              "start": 4.5,
+              "length": 1.6,
+              "fit": "cover"
+            },
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{Content/1-Avatar.mov}}",
+                "trim": 6.1
+              },
+              "start": 6.1,
+              "length": 2.2,
+              "fit": "cover"
+            },
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{Content/1-Avatar.mov}}",
+                "trim": 8.3
+              },
+              "start": 8.3,
+              "length": 2.0,
+              "fit": "cover"
+            },
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{Content/4-Content.mov}}",
+                "trim": 10.3
+              },
+              "start": 10.3,
+              "length": 0.6,
+              "fit": "cover"
+            },
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{Content/1-Avatar.mov}}",
+                "trim": 10.9
+              },
+              "start": 10.9,
+              "length": 2.3,
+              "fit": "cover",
+              "effect": "zoomIn",
+              "transition": {
+                "in": "zoom"
+              }
+            },
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{Content/5-Analitic.mp4}}",
+                "trim": 13.2
+              },
+              "start": 13.2,
+              "length": 3.2,
+              "fit": "cover"
+            },
+            {
+              "asset": {
+                "type": "video",
+                "src": "{{Content/1-Avatar.mov}}",
+                "trim": 16.4
+              },
+              "start": 16.4,
+              "length": 2.1,
+              "fit": "cover",
+              "effect": "zoomIn",
+              "transition": {
+                "in": "zoom"
+              }
+            }
+          ]
+        },
+        {
+          "clips": [
+            {
+              "asset": {
+                "type": "audio",
+                "src": "{{Content/click.wav}}",
+                "volume": 0.7
+              },
+              "start": 1.8,
+              "length": 1.2
+            },
+            {
+              "asset": {
+                "type": "audio",
+                "src": "{{Content/whoosh.wav}}",
+                "volume": 0.7
+              },
+              "start": 3.0,
+              "length": 1.5
+            },
+            {
+              "asset": {
+                "type": "audio",
+                "src": "{{Content/whoosh.wav}}",
+                "volume": 0.7
+              },
+              "start": 4.5,
+              "length": 1.6
+            },
+            {
+              "asset": {
+                "type": "audio",
+                "src": "{{Content/click.wav}}",
+                "volume": 0.7
+              },
+              "start": 8.3,
+              "length": 2.0
+            },
+            {
+              "asset": {
+                "type": "audio",
+                "src": "{{Content/whoosh.wav}}",
+                "volume": 0.7
+              },
+              "start": 10.9,
+              "length": 2.3
+            },
+            {
+              "asset": {
+                "type": "audio",
+                "src": "{{Content/camera-shutter.wav}}",
+                "volume": 0.7
+              },
+              "start": 13.2,
+              "length": 3.2
+            },
+            {
+              "asset": {
+                "type": "audio",
+                "src": "{{Content/whoosh.wav}}",
+                "volume": 0.7
+              },
+              "start": 16.4,
+              "length": 2.1
+            }
+          ]
+        }
+      ],
+      "soundtrack": {
+        "src": "{{Content/background_music.mp3}}",
+        "effect": "fadeIn",
+        "volume": 0.5
+      },
+      "background": "#000000"
+    }
+  },
+  "output": {
+    "format": "mp4",
+    "resolution": "sd",
+    "aspectRatio": "9:16",
+    "fps": 30
+  },
+  "merge": [
+    {
+      "find": "Content/1-Avatar.mov",
+      "replace": ""
+    },
+    {
+      "find": "Content/1-Avatar.mov",
+      "replace": ""
+    },
+    {
+      "find": "Content/2-Ustal.mp4",
+      "replace": ""
+    },
+    {
+      "find": "Content/3-Girl.mp4",
+      "replace": ""
+    },
+    {
+      "find": "Content/1-Avatar.mov",
+      "replace": ""
+    },
+    {
+      "find": "Content/1-Avatar.mov",
+      "replace": ""
+    },
+    {
+      "find": "Content/4-Content.mov",
+      "replace": ""
+    },
+    {
+      "find": "Content/1-Avatar.mov",
+      "replace": ""
+    },
+    {
+      "find": "Content/5-Analitic.mp4",
+      "replace": ""
+    },
+    {
+      "find": "Content/1-Avatar.mov",
+      "replace": ""
+    },
+    {
+      "find": "Content/click.wav",
+      "replace": ""
+    },
+    {
+      "find": "Content/whoosh.wav",
+      "replace": ""
+    },
+    {
+      "find": "Content/whoosh.wav",
+      "replace": ""
+    },
+    {
+      "find": "Content/click.wav",
+      "replace": ""
+    },
+    {
+      "find": "Content/whoosh.wav",
+      "replace": ""
+    },
+    {
+      "find": "Content/camera-shutter.wav",
+      "replace": ""
+    },
+    {
+      "find": "Content/whoosh.wav",
+      "replace": ""
+    },
+    {
+      "find": "Content/background_music.mp3",
+      "replace": ""
+    }
+  ]
+}

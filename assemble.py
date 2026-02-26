@@ -11,6 +11,12 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).parent))
 
 from fast_clip.assembler import VideoAssembler
+from fast_clip.check.validation import (
+    JsonValidator,
+    FileChecker,
+    FieldValidator,
+    ValidationLevel,
+)
 
 
 def print_usage():
@@ -18,8 +24,11 @@ def print_usage():
     print("Usage: python assemble.py <script.json> [options]")
     print("")
     print("Options:")
-    print("  -o, --output <dir>    Output directory (default: current)")
+    print("  -o, --output <dir>    Output directory or file path")
+    print("                        (default: <script_dir>/output/<name>.mp4)")
     print("  -v, --verbose         Verbose output")
+    print("  --skip-validate        Skip validation (not recommended)")
+    print("  --strict              Enable strict validation mode")
     print("  -h, --help            Show this help")
     print("")
     print("Environment:")
@@ -29,6 +38,7 @@ def print_usage():
     print("  python assemble.py script_video_01.json")
     print("  python assemble.py script_video_01.json -v")
     print("  python assemble.py script_video_01.json -o ./output -v")
+    print("  python assemble.py script_video_01.json -o ./output/custom_name.mp4 -v")
 
 
 def main():
@@ -47,6 +57,8 @@ def main():
 
     output_dir = None
     verbose = False
+    skip_validate = False
+    strict_mode = False
 
     i = 1
     while i < len(args):
@@ -58,6 +70,12 @@ def main():
             i += 2
         elif args[i] in ("-v", "--verbose"):
             verbose = True
+            i += 1
+        elif args[i] == "--skip-validate":
+            skip_validate = True
+            i += 1
+        elif args[i] == "--strict":
+            strict_mode = True
             i += 1
         elif args[i] in ("-h", "--help"):
             print_usage()
@@ -102,11 +120,74 @@ def main():
         print(f"   Output: {output_dir}")
     print("")
 
-    assembler = VideoAssembler(api_key)
+    # Validate script before assembly (unless skipped)
+    if not skip_validate:
+        print("🔍 Validating script...")
 
-    # Check if script is template format
-    with open(script_path, "r") as f:
-        script_data = json.load(f)
+        # Load script data
+        with open(script_path, "r") as f:
+            script_data = json.load(f)
+
+        # Initialize validators
+        json_validator = JsonValidator(strict_mode=strict_mode)
+        file_checker = FileChecker(strict_mode=strict_mode, script_path=script_path)
+        field_validator = FieldValidator(strict_mode=strict_mode)
+
+        # Run validation
+        json_report = json_validator.validate(script_data)
+        file_report = file_checker.validate(script_data)
+        field_report = field_validator.validate(script_data)
+
+        # Combine results and check for errors
+        total_errors = (
+            json_report.total_errors
+            + file_report.total_errors
+            + field_report.total_errors
+        )
+        total_warnings = (
+            json_report.total_warnings
+            + file_report.total_warnings
+            + field_report.total_warnings
+        )
+
+        if total_errors > 0:
+            print("❌ Validation FAILED - errors found:")
+            all_results = (
+                json_report.results + file_report.results + field_report.results
+            )
+            for result in all_results:
+                if result.level == ValidationLevel.ERROR:
+                    print(f"  ✗ {result.field or 'unknown'}: {result.message}")
+                    if result.suggestion:
+                        print(f"    → {result.suggestion}")
+            print("")
+            print("Fix errors before proceeding with assembly.")
+            sys.exit(1)
+
+        if total_warnings > 0:
+            print("⚠️  Validation passed with warnings:")
+            if verbose:
+                all_results = (
+                    json_report.results + file_report.results + field_report.results
+                )
+                for result in all_results:
+                    if result.level == ValidationLevel.WARNING:
+                        print(f"  ! {result.field or 'unknown'}: {result.message}")
+                        if result.suggestion:
+                            print(f"    → {result.suggestion}")
+            print("")
+        else:
+            print("✅ Validation passed")
+        print("")
+    else:
+        print("⚠️  Skipping validation (not recommended)")
+        print("")
+
+        # Load script data for assembler
+        with open(script_path, "r") as f:
+            script_data = json.load(f)
+
+    assembler = VideoAssembler(api_key)
 
     if "template" in script_data:
         print("📋 Using template + merge workflow")

@@ -25,9 +25,14 @@ uv run python check.py -v script.json           # Verbose validation
 uv run python check.py -q script.json           # Quiet validation (exit code only)
 
 # Assemble video (needs SHOTSTACK_API_KEY in .env)
-uv run python assemble.py script.json           # Assemble video
-uv run python assemble.py script.json -v        # Verbose mode
-uv run python assemble.py script.json -o ./out  # Custom output dir
+uv run python assemble.py script.json                    # Assemble video (default: output/<name>.mp4)
+uv run python assemble.py script.json -v                 # Verbose mode
+uv run python assemble.py script.json -o ./out           # Custom output directory
+uv run python assemble.py script.json -o ./out/video.mp4 # Custom output file
+
+# Check script validation (from any directory)
+uv run python check.py MyProject/script.json        # Validate (uses MyProject/Content/ for resources)
+cd MyProject && uv run python check.py script.json  # Same, from project directory
 
 # Quick build using shell script
 ./build.sh script.json                          # Quick build
@@ -269,6 +274,8 @@ The `check.py` validator now includes comprehensive validation for template + me
 ### Example Valid Structure
 ```json
 {
+  "name": "MyProject",
+  "resourcesDir": "Content",
   "template": {
     "timeline": {
       "tracks": [{
@@ -276,10 +283,18 @@ The `check.py` validator now includes comprehensive validation for template + me
           "asset": {
             "type": "video",
             "src": "{{Content/video.mp4}}"
-          }
+          },
+          "start": 0.0,
+          "length": 5.0
         }]
       }]
     }
+  },
+  "output": {
+    "format": "mp4",
+    "resolution": "sd",
+    "aspectRatio": "9:16",
+    "fps": 30
   },
   "merge": [
     {"find": "Content/video.mp4", "replace": ""}
@@ -291,7 +306,7 @@ The `check.py` validator now includes comprehensive validation for template + me
 - Python 3.13+ (see pyproject.toml)
 - Dependencies: pydantic, requests, python-dotenv, mypy, ruff
 - Use `pathlib.Path` for cross-platform file paths
-- Scripts are in Shotstack Template JSON format with `template`, `output`, and `merge` fields
+- Scripts are in Shotstack Template JSON format with `name`, `resourcesDir`, `template`, `output`, and `merge` fields at top level
 - Shotstack API used for cloud video processing via template + merge workflow
 - Placeholders use `{{resources_dir/filename}}` format in template, replaced via merge array
 - Requires `SHOTSTACK_API_KEY` in `.env` file

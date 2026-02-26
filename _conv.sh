@@ -1,2 +1,2 @@
-uv run convert_script.py $*
+uv run convert_script.py -v $*
 

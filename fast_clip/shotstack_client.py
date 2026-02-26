@@ -1,5 +1,6 @@
 """Shotstack client for Fast-Clip - handles rendering API."""
 
+import json
 import requests
 import time
 from pathlib import Path
@@ -48,7 +49,14 @@ class ShotstackClient:
         url = f"{self.base_url}/render"
 
         try:
+            print(f"DEBUG: Submitting to {url}")
+            print(f"DEBUG: Request data: {json.dumps(edit_data, indent=2)}")
+
             response = requests.post(url, headers=self.headers, json=edit_data)
+
+            print(f"DEBUG: Response status: {response.status_code}")
+            print(f"DEBUG: Response text: {response.text}")
+
             response.raise_for_status()
             data = response.json()
 

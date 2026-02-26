@@ -141,7 +141,7 @@ class VideoAssembler:
             print("📤 Uploading video files...")
 
         resource_paths = self._extract_resources(script_data)
-        uploaded_files = {}
+        uploaded_files: dict[str, str] = {}
 
         for i, resource_path in enumerate(resource_paths):
             # resource_path is like "Video_01/clip_01.mp4"
@@ -155,10 +155,10 @@ class VideoAssembler:
 
             result = self.uploader.upload(file_path)
 
-            if not result.success:
+            if not result.success or result.url is None:
                 return AssemblyResult(
                     success=False,
-                    error=f"Failed to upload {resource_path}: {result.error}",
+                    error=f"Failed to upload {resource_path}: {result.error or 'No URL returned'}",
                 )
 
             uploaded_files[resource_path] = result.url
@@ -228,7 +228,7 @@ class VideoAssembler:
             print("💾 Downloading video...")
 
         # Generate output path based on script name
-        output_path = self._generate_output_path(script_path, output_dir)
+        output_path = self._generate_output_path(script_path, output_dir, script_data)
 
         if final_result.url is None:
             return AssemblyResult(
@@ -255,22 +255,35 @@ class VideoAssembler:
         )
 
     def _generate_output_path(
-        self, script_path: Path, output_dir: Optional[Path] = None
+        self,
+        script_path: Path,
+        output_dir: Optional[Path] = None,
+        script_data: Optional[dict] = None,
     ) -> Path:
         """Generate output path based on script name with index support.
 
         Args:
             script_path: Path to input script
-            output_dir: Output directory (default: current directory)
+            output_dir: Output directory (default: script_dir/output)
+            script_data: Script data to extract name field
 
         Returns:
             Path for output video file
         """
-        if output_dir is None:
-            output_dir = Path.cwd()
+        script_dir = script_path.parent
 
-        # Get base name from script (e.g., "hello.json" -> "hello")
-        base_name = script_path.stem
+        if output_dir is None:
+            # Default to 'output/' subdirectory in script's directory
+            output_dir = script_dir / "output"
+
+        # Create output directory if it doesn't exist
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Get base name: prefer 'name' from JSON, fallback to script filename
+        if script_data and "name" in script_data:
+            base_name = script_data["name"]
+        else:
+            base_name = script_path.stem
 
         # Start with base name + .mp4
         output_path = output_dir / f"{base_name}.mp4"
@@ -302,8 +315,8 @@ class VideoAssembler:
             template = script_data["template"]
             if "timeline" not in template:
                 errors.append("Missing required field: 'template.timeline'")
-            if "output" not in template:
-                errors.append("Missing required field: 'template.output'")
+            if "output" not in script_data:
+                errors.append("Missing required field: 'output'")
 
         if "merge" not in script_data:
             errors.append("Missing required field: 'merge'")
@@ -445,7 +458,6 @@ class VideoAssembler:
         if verbose:
             print("📤 Uploading files for template...")
 
-        uploaded_files = {}
         script_dir = script_path.parent
         # Get resources_dir from template data
         template_data = script_data.get("template", {})
@@ -476,6 +488,17 @@ class VideoAssembler:
         # Collect files from template placeholders even if merge is empty
         # We need to upload them and create merge entries for Shotstack to work
         template_timeline = template_data.get("timeline", {})
+
+        # Check soundtrack
+        soundtrack = template_timeline.get("soundtrack", {})
+        if soundtrack and "src" in soundtrack:
+            src = soundtrack["src"]
+            if src.startswith("{{") and src.endswith("}}"):
+                placeholder = src[2:-2]
+                if "/" in placeholder:
+                    filename = placeholder.split("/")[-1]
+                    unique_files.add(filename)
+
         tracks = template_timeline.get("tracks", [])
         for track in tracks:
             clips = track.get("clips", [])
@@ -491,7 +514,7 @@ class VideoAssembler:
                             unique_files.add(filename)
 
         # Upload all unique files if any
-        uploaded_files = {}
+        uploaded_files: dict[str, str] = {}
         if unique_files:
             for i, filename in enumerate(unique_files):
                 file_path = resources_dir / filename
@@ -508,10 +531,10 @@ class VideoAssembler:
 
                 result = self.uploader.upload(file_path)
 
-                if not result.success:
+                if not result.success or result.url is None:
                     return AssemblyResult(
                         success=False,
-                        error=f"Failed to upload {filename}: {result.error}",
+                        error=f"Failed to upload {filename}: {result.error or 'No URL returned'}",
                     )
 
                 uploaded_files[filename] = result.url
@@ -528,53 +551,53 @@ class VideoAssembler:
         # Note: find should be without {{}} and match the placeholder name in timeline
         merge_data = []
 
-        # First, process existing merge fields with actual replacements
+        # First, process existing merge fields with actual replacements (or empty ones to be filled)
         for merge_field in merge_fields:
             if isinstance(merge_field, dict):
                 find_value = merge_field.get("find", "")
-                replace_value = merge_field.get("replace", "")
-                if find_value and replace_value and "/" in find_value:
+                if find_value and "/" in find_value:
                     filename = find_value.split("/")[-1]
                     if filename in uploaded_files:
-                        # Use just the filename (without Content/) as find value
+                        # Use just the filename (without Content/) as find value for placeholders
                         merge_data.append(
                             {"find": filename, "replace": uploaded_files[filename]}
                         )
+                        # Also add the full path as find value for placeholders
+                        merge_data.append(
+                            {"find": find_value, "replace": uploaded_files[filename]}
+                        )
                         if verbose:
-                            print(
-                                f"   ✓ Prepared merge: {filename} -> {uploaded_files[filename][:50]}..."
-                            )
+                            print(f"   ✓ Prepared merge for: {filename}")
 
-        # Then, add merge entries for uploaded files that weren't in original merge
-        # This ensures all placeholders get replaced with valid URLs
+        # Then, add merge entries for uploaded files from template placeholders
         template_timeline = template_data.get("timeline", {})
-        tracks = template_timeline.get("tracks", [])
-        placeholder_filenames = set()
 
-        for track in tracks:
-            clips = track.get("clips", [])
-            for clip in clips:
-                asset = clip.get("asset", {})
-                if asset.get("type") in ("video", "audio"):
-                    src = asset.get("src", "")
-                    if src.startswith("{{") and src.endswith("}}"):
-                        placeholder = src[2:-2]  # Remove {{ and }}
-                        if "/" in placeholder:
-                            filename = placeholder.split("/")[-1]
-                            placeholder_filenames.add(filename)
+        # Helper to extract placeholders from timeline
+        def extract_placeholders(obj):
+            placeholders = set()
+            if isinstance(obj, str):
+                if obj.startswith("{{") and obj.endswith("}}"):
+                    placeholders.add(obj[2:-2])
+            elif isinstance(obj, dict):
+                for v in obj.values():
+                    placeholders.update(extract_placeholders(v))
+            elif isinstance(obj, list):
+                for item in obj:
+                    placeholders.update(extract_placeholders(item))
+            return placeholders
 
-        # Add missing merge entries
-        for filename in placeholder_filenames:
-            if filename in uploaded_files and not any(
-                m.get("find") == filename for m in merge_data
-            ):
-                merge_data.append(
-                    {"find": filename, "replace": uploaded_files[filename]}
-                )
-                if verbose:
-                    print(
-                        f"   ✓ Added auto merge: {filename} -> {uploaded_files[filename][:50]}..."
+        placeholder_paths = extract_placeholders(template_timeline)
+
+        # Add missing merge entries from placeholders
+        for path in placeholder_paths:
+            if not any(m.get("find") == path for m in merge_data):
+                filename = path.split("/")[-1] if "/" in path else path
+                if filename in uploaded_files:
+                    merge_data.append(
+                        {"find": path, "replace": uploaded_files[filename]}
                     )
+                    if verbose:
+                        print(f"   ✓ Added auto merge for placeholder: {path}")
 
         if verbose and merge_data:
             print(f"🔗 Merge data prepared: {len(merge_data)} replacements")
@@ -590,15 +613,11 @@ class VideoAssembler:
 
         def replace_placeholders(obj):
             if isinstance(obj, str):
-                # Replace {{Content/filename}} with URL using filename as key
-                for merge_item in merge_data:
-                    # Match {{Content/filename}} pattern
-                    placeholder_with_path = "{{Content/" + merge_item["find"] + "}}"
-                    placeholder_simple = "{{" + merge_item["find"] + "}}"
-                    if placeholder_with_path in obj:
-                        obj = obj.replace(placeholder_with_path, merge_item["replace"])
-                    elif placeholder_simple in obj:
-                        obj = obj.replace(placeholder_simple, merge_item["replace"])
+                if obj.startswith("{{") and obj.endswith("}}"):
+                    placeholder = obj[2:-2]
+                    for merge_item in merge_data:
+                        if merge_item["find"] == placeholder:
+                            return merge_item["replace"]
                 return obj
             elif isinstance(obj, dict):
                 return {k: replace_placeholders(v) for k, v in obj.items()}
@@ -611,7 +630,7 @@ class VideoAssembler:
         # Prepare render data with timeline, output, and merge
         render_data = {
             "timeline": timeline,
-            "output": template_data.get("output", {}),
+            "output": script_data.get("output", template_data.get("output", {})),
             "merge": [],
         }
 
@@ -660,7 +679,7 @@ class VideoAssembler:
             print("💾 Downloading video...")
 
         # Generate output path based on script name
-        output_path = self._generate_output_path(script_path, output_dir)
+        output_path = self._generate_output_path(script_path, output_dir, script_data)
 
         if final_result.url is None:
             return AssemblyResult(
